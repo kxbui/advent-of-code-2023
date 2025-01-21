@@ -9,10 +9,13 @@ import { FormsModule } from '@angular/forms';
   styleUrl: './app.component.css',
 })
 export class AppComponent {
-  input = `1abc2
-pqr3stu8vwx
-a1b2c3d4e5f
-treb7uchet`;
+  input = `two1nine
+eightwothree
+abcone2threexyz
+xtwone3four
+4nineeightseven2
+zoneight234
+7pqrstsixteen`;
 
   result = signal('');
   ngZone = inject(NgZone);
@@ -34,21 +37,91 @@ treb7uchet`;
       last = '',
       total = 0;
     arr.forEach((line) => {
-      for (let i = 0; i < line.length; i++) {
-        if (this.isNumeric(line.at(i))) {
-          first = first === '' ? line.at(i)! : first;
-          last = line.at(i)!;
+      let count = 0;
+      while (count < line.length) {
+        const result = this.isDigitStr(line.substring(count));
+        if (result) {
+          first = first === '' ? result : first;
+          last = result;
+        } else if (this.isNumeric(line[count])) {
+          first = first === '' ? line[count] : first;
+          last = line[count];
         }
+        count++;
       }
       total += Number(`${first}${last}`);
       first = '';
-      last = ''
+      last = '';
     });
     return total;
   }
 
   isNumeric(str: string | undefined): boolean {
-    return str ? /^\d+$/.test(str) : false;
+    if (str === undefined) return false;
+    if (/^\d+$/.test(str)) {
+      return true;
+    }
+    return false;
+  }
+
+  isDigitStr(str: string | undefined): string | null {
+    const digitStr = [
+      'one',
+      'two',
+      'three',
+      'four',
+      'five',
+      'six',
+      'seven',
+      'eight',
+      'nine',
+    ];
+
+    if (str === undefined) return null;
+
+    const digit = digitStr.find((s) => str?.startsWith(s));
+    if (digit) {
+      return this.toNumber(digit);
+    }
+    return null;
+  }
+
+  toNumber(str: string): string {
+    switch (str) {
+      case 'one':
+        return '1';
+      case 'two':
+        return '2';
+      case 'three':
+        return '3';
+      case 'four':
+        return '4';
+      case 'five':
+        return '5';
+      case 'six':
+        return '6';
+      case 'seven':
+        return '7';
+      case 'eight':
+        return '8';
+      case 'nine':
+        return '9';
+    }
+    return '-1';
+  }
+
+  getDigitStr(): string[] {
+    return [
+      'one',
+      'two',
+      'three',
+      'four',
+      'five',
+      'six',
+      'seven',
+      'eight',
+      'nine',
+    ];
   }
 
   parseRow(data: any): any[] {
