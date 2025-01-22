@@ -1,10 +1,6 @@
 import { Component, inject, NgZone, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-const MAX_RED = 12;
-const MAX_GREEN = 13;
-const MAX_BLUE = 14;
-
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -37,32 +33,30 @@ Game 5: 6 red, 1 blue, 3 green; 2 blue, 1 red, 2 green`;
   start(arr: string[]): number {
     let total = 0;
     arr.forEach((line) => {
-      const [gameStr, sets] = line.split(':');
-      const result = this.testGame(sets);
-      total += result ? this.getDigit(gameStr) : 0;
+      const [_, sets] = line.split(':');
+      total += this.getMinCubes(sets);
     });
     return total;
   }
 
-  testConfig(cubes: { blue: number; red: number; green: number }): boolean {
-    return (
-      cubes.blue <= MAX_BLUE && cubes.red <= MAX_RED && cubes.green <= MAX_GREEN
-    );
-  }
+  getMinCubes(sets: string): number {
+    let b = 0,
+    r = 0,
+    g = 0;
 
-  testGame(sets: string): boolean {
-    return sets.split(';').every((set) => {
-      return set.split(',').every((cube) => {
-        const blue = cube.includes('blue') ? this.getDigit(cube) : 0;
-        const red = cube.includes('red') ? this.getDigit(cube) : 0;
-        const green = cube.includes('green') ? this.getDigit(cube) : 0;
-        this.testConfig({ blue, red, green });
-        if (!this.testConfig({ blue, red, green })) {
-          return false;
-        }
-        return true;
+    sets.split(';').forEach((set) => {
+      set.split(',').forEach((cube) => {
+        const blue = cube.includes('blue') ? this.getDigit(cube) : null;
+        const red = cube.includes('red') ? this.getDigit(cube) : null;
+        const green = cube.includes('green') ? this.getDigit(cube) : null;
+
+        b = blue !== null && blue > b ? blue : b;
+        r = red !== null && red > r ? red : r;
+        g = green !== null && green > g ? green : g;
       });
-    });
+    }, 0);
+
+    return (b ?? 1) * (r ?? 1) * (g ?? 1);
   }
 
   getDigit(str: string): number {
