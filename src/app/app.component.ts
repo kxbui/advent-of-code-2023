@@ -35,28 +35,37 @@ export class AppComponent {
     });
   }
 
-  start(map: string[][]): number {
+  start(arr: string[][]): number {
+    const map = new Map<string, number[]>();
     let digit = '';
-    let total = 0;
-    let isIncluded = false;
-    for (let r = 0; r < map.length; r++) {
-      for (let c = 0; c < map[0].length; c++) {
-        if (this.isDigit(map[r][c])) {
-          digit += map[r][c];
-          isIncluded = !isIncluded
-            ? this.checkNeighbors(map, { row: r, col: c })
-            : isIncluded;
+    let set = new Set<string>();
+
+    for (let r = 0; r < arr.length; r++) {
+      for (let c = 0; c < arr[0].length; c++) {
+        if (this.isDigit(arr[r][c])) {
+          digit += arr[r][c];
+          const stars = this.checkNeighbors(arr, { row: r, col: c });
+          set = new Set([...set, ...stars]);
         } else {
-          total += isIncluded ? Number(digit) : 0;
+          Array.from(set.values()).forEach((loc) => {
+            map.has(loc)
+              ? map.set(loc, [...map.get(loc)!, Number(digit)])
+              : map.set(loc, [Number(digit)]);
+          });
           digit = '';
-          isIncluded = false;
+          set.clear();
         }
       }
     }
-    return total;
+    return Array.from(map.entries())
+      .filter(([_, value]) => value.length === 2)
+      .reduce((total, [_, value]) => total + (Number(value[0]) * Number(value[1])), 0);
   }
 
-  checkNeighbors(map: string[][], curr: { row: number; col: number }): boolean {
+  checkNeighbors(
+    map: string[][],
+    curr: { row: number; col: number }
+  ): string[] {
     return [
       // left
       { row: curr.row, col: curr.col - 1 },
@@ -74,10 +83,12 @@ export class AppComponent {
       { row: curr.row + 1, col: curr.col - 1 },
       // bottom-right
       { row: curr.row + 1, col: curr.col + 1 },
-    ].some((loc) => this.isSymbol(map, loc));
+    ]
+      .filter((loc) => this.isStar(map, loc))
+      .map((item) => this.formatLoc(item));
   }
 
-  isSymbol(map: string[][], curr: { row: number; col: number }): boolean {
+  isStar(map: string[][], curr: { row: number; col: number }): boolean {
     const width = map[0].length;
     const height = map.length;
     return (
@@ -85,13 +96,16 @@ export class AppComponent {
       curr.row < height &&
       curr.col >= 0 &&
       curr.col < width &&
-      map[curr.row][curr.col] !== '.' &&
-      !this.isDigit(map[curr.row][curr.col])
+      map[curr.row][curr.col] === '*'
     );
   }
 
   isDigit(str: string): boolean {
     return !Number.isNaN(parseInt(str.replace(/^\D+/g, '')));
+  }
+
+  formatLoc(currPos: { row: number; col: number }) {
+    return [currPos.row, currPos.col].join('-');
   }
 
   parseRow(data: any): any[] {
