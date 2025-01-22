@@ -9,16 +9,12 @@ import { FormsModule } from '@angular/forms';
   styleUrl: './app.component.css',
 })
 export class AppComponent {
-  input = `467..114..
-...*......
-..35..633.
-......#...
-617*......
-.....+.58.
-..592.....
-......755.
-...$.*....
-.664.598..`;
+  input = `Card 1: 41 48 83 86 17 | 83 86  6 31 17  9 48 53
+Card 2: 13 32 20 16 61 | 61 30 68 82 17 32 24 19
+Card 3:  1 21 53 59 44 | 69 82 63 72 16 21 14  1
+Card 4: 41 92 73 84 69 | 59 84 76 51 58  5 54 83
+Card 5: 87 83 26 28 32 | 88 30 70 12 93 22 82 36
+Card 6: 31 18 13 56 72 | 74 77 10 23 35 67 36 11`;
 
   result = signal('');
   ngZone = inject(NgZone);
@@ -28,66 +24,41 @@ export class AppComponent {
 
     this.ngZone.runOutsideAngular(() => {
       setTimeout(() => {
-        const data = this.parseRow(this.input).map((line) => line.split(''));
+        const data = this.parseRow(this.input);
         const total = this.start(data);
         this.result.set(`${total}`);
       }, 0);
     });
   }
 
-  start(map: string[][]): number {
-    let digit = '';
+  start(data: string[]): number {
     let total = 0;
-    let isIncluded = false;
-    for (let r = 0; r < map.length; r++) {
-      for (let c = 0; c < map[0].length; c++) {
-        if (this.isDigit(map[r][c])) {
-          digit += map[r][c];
-          isIncluded = !isIncluded
-            ? this.checkNeighbors(map, { row: r, col: c })
-            : isIncluded;
-        } else {
-          total += isIncluded ? Number(digit) : 0;
-          digit = '';
-          isIncluded = false;
-        }
-      }
-    }
+
+    data.forEach((line) => {
+      total += this.getCardValue(line);
+    });
     return total;
   }
 
-  checkNeighbors(map: string[][], curr: { row: number; col: number }): boolean {
-    return [
-      // left
-      { row: curr.row, col: curr.col - 1 },
-      // right
-      { row: curr.row, col: curr.col + 1 },
-      // top
-      { row: curr.row - 1, col: curr.col },
-      // bottom
-      { row: curr.row + 1, col: curr.col },
-      // top-left
-      { row: curr.row - 1, col: curr.col - 1 },
-      // top-right
-      { row: curr.row - 1, col: curr.col + 1 },
-      // bottom-left
-      { row: curr.row + 1, col: curr.col - 1 },
-      // bottom-right
-      { row: curr.row + 1, col: curr.col + 1 },
-    ].some((loc) => this.isSymbol(map, loc));
+  getCardValue(card: string): number {
+    let value = 0;
+
+    const [_, numList] = card.split(':');
+    const [winningNums, yourNums] = numList.split('|');
+
+    const result = this.findIntersection(winningNums, yourNums);
+    if (result.length) {
+      result.forEach((_, i) => {
+        value = i > 0 ? value * 2 : 1;
+      });
+    }
+    return value;
   }
 
-  isSymbol(map: string[][], curr: { row: number; col: number }): boolean {
-    const width = map[0].length;
-    const height = map.length;
-    return (
-      curr.row >= 0 &&
-      curr.row < height &&
-      curr.col >= 0 &&
-      curr.col < width &&
-      map[curr.row][curr.col] !== '.' &&
-      !this.isDigit(map[curr.row][curr.col])
-    );
+  findIntersection(str1: string, str2: string): string[] {
+    const array1 = str1.split(/\s*[\s,]\s*/);
+    const array2 = str2.split(/\s*[\s,]\s*/);
+    return array1.filter((value) => array2.includes(value)).filter(Boolean);
   }
 
   isDigit(str: string): boolean {
