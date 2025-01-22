@@ -1,6 +1,10 @@
 import { Component, inject, NgZone, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
+const MAX_RED = 12;
+const MAX_GREEN = 13;
+const MAX_BLUE = 14;
+
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -9,13 +13,11 @@ import { FormsModule } from '@angular/forms';
   styleUrl: './app.component.css',
 })
 export class AppComponent {
-  input = `two1nine
-eightwothree
-abcone2threexyz
-xtwone3four
-4nineeightseven2
-zoneight234
-7pqrstsixteen`;
+  input = `Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green
+Game 2: 1 blue, 2 green; 3 green, 4 blue, 1 red; 1 green, 1 blue
+Game 3: 8 green, 6 blue, 20 red; 5 blue, 4 red, 13 green; 5 green, 1 red
+Game 4: 1 green, 3 red, 6 blue; 3 green, 6 red; 3 green, 15 blue, 14 red
+Game 5: 6 red, 1 blue, 3 green; 2 blue, 1 red, 2 green`;
 
   result = signal('');
   ngZone = inject(NgZone);
@@ -33,95 +35,38 @@ zoneight234
   }
 
   start(arr: string[]): number {
-    let first = '',
-      last = '',
-      total = 0;
+    let total = 0;
     arr.forEach((line) => {
-      let count = 0;
-      while (count < line.length) {
-        const result = this.isDigitStr(line.substring(count));
-        if (result) {
-          first = first === '' ? result : first;
-          last = result;
-        } else if (this.isNumeric(line[count])) {
-          first = first === '' ? line[count] : first;
-          last = line[count];
-        }
-        count++;
-      }
-      total += Number(`${first}${last}`);
-      first = '';
-      last = '';
+      const [gameStr, sets] = line.split(':');
+      const result = this.testGame(sets);
+      total += result ? this.getDigit(gameStr) : 0;
     });
     return total;
   }
 
-  isNumeric(str: string | undefined): boolean {
-    if (str === undefined) return false;
-    if (/^\d+$/.test(str)) {
-      return true;
-    }
-    return false;
+  testConfig(cubes: { blue: number; red: number; green: number }): boolean {
+    return (
+      cubes.blue <= MAX_BLUE && cubes.red <= MAX_RED && cubes.green <= MAX_GREEN
+    );
   }
 
-  isDigitStr(str: string | undefined): string | null {
-    const digitStr = [
-      'one',
-      'two',
-      'three',
-      'four',
-      'five',
-      'six',
-      'seven',
-      'eight',
-      'nine',
-    ];
-
-    if (str === undefined) return null;
-
-    const digit = digitStr.find((s) => str?.startsWith(s));
-    if (digit) {
-      return this.toNumber(digit);
-    }
-    return null;
+  testGame(sets: string): boolean {
+    return sets.split(';').every((set) => {
+      return set.split(',').every((cube) => {
+        const blue = cube.includes('blue') ? this.getDigit(cube) : 0;
+        const red = cube.includes('red') ? this.getDigit(cube) : 0;
+        const green = cube.includes('green') ? this.getDigit(cube) : 0;
+        this.testConfig({ blue, red, green });
+        if (!this.testConfig({ blue, red, green })) {
+          return false;
+        }
+        return true;
+      });
+    });
   }
 
-  toNumber(str: string): string {
-    switch (str) {
-      case 'one':
-        return '1';
-      case 'two':
-        return '2';
-      case 'three':
-        return '3';
-      case 'four':
-        return '4';
-      case 'five':
-        return '5';
-      case 'six':
-        return '6';
-      case 'seven':
-        return '7';
-      case 'eight':
-        return '8';
-      case 'nine':
-        return '9';
-    }
-    return '-1';
-  }
-
-  getDigitStr(): string[] {
-    return [
-      'one',
-      'two',
-      'three',
-      'four',
-      'five',
-      'six',
-      'seven',
-      'eight',
-      'nine',
-    ];
+  getDigit(str: string): number {
+    return parseInt(str.replace(/^\D+/g, ''));
   }
 
   parseRow(data: any): any[] {
