@@ -9,12 +9,39 @@ import { FormsModule } from '@angular/forms';
   styleUrl: './app.component.css',
 })
 export class AppComponent {
-  input = `Card 1: 41 48 83 86 17 | 83 86  6 31 17  9 48 53
-Card 2: 13 32 20 16 61 | 61 30 68 82 17 32 24 19
-Card 3:  1 21 53 59 44 | 69 82 63 72 16 21 14  1
-Card 4: 41 92 73 84 69 | 59 84 76 51 58  5 54 83
-Card 5: 87 83 26 28 32 | 88 30 70 12 93 22 82 36
-Card 6: 31 18 13 56 72 | 74 77 10 23 35 67 36 11`;
+  input = `seeds: 79 14 55 13
+
+seed-to-soil map:
+50 98 2
+52 50 48
+
+soil-to-fertilizer map:
+0 15 37
+37 52 2
+39 0 15
+
+fertilizer-to-water map:
+49 53 8
+0 11 42
+42 0 7
+57 7 4
+
+water-to-light map:
+88 18 7
+18 25 70
+
+light-to-temperature map:
+45 77 23
+81 45 19
+68 64 13
+
+temperature-to-humidity map:
+0 69 1
+1 0 69
+
+humidity-to-location map:
+60 56 37
+56 93 4`;
 
   result = signal('');
   ngZone = inject(NgZone);
@@ -32,37 +59,77 @@ Card 6: 31 18 13 56 72 | 74 77 10 23 35 67 36 11`;
   }
 
   start(data: string[]): number {
-    let total = 0;
+    let min = Infinity;
+    let dest = -1;
 
-    data.forEach((line) => {
-      total += this.getCardValue(line);
-    });
-    return total;
-  }
+    const { seeds, maps } = this.parseInput(data);
 
-  getCardValue(card: string): number {
-    let value = 0;
-
-    const [_, numList] = card.split(':');
-    const [winningNums, yourNums] = numList.split('|');
-
-    const result = this.findIntersection(winningNums, yourNums);
-    if (result.length) {
-      result.forEach((_, i) => {
-        value = i > 0 ? value * 2 : 1;
+    seeds.forEach((seed) => {
+      dest = seed;
+      maps.forEach((map) => {
+        dest = this.mapValue(map, dest);
+        const s = null;
       });
+      if (min > dest) min = dest;
+    });
+    return min;
+  }
+
+  mapValue(map: any[], source: number): number {
+    const section = map.find(
+      (sec) => source >= sec.sourceStart && source <= sec.sourceEnd
+    );
+    if (section) {
+      const gap = source - section.sourceStart;
+      return section.destStart + gap;
     }
-    return value;
+    return source
   }
 
-  findIntersection(str1: string, str2: string): string[] {
-    const array1 = str1.split(/\s*[\s,]\s*/);
-    const array2 = str2.split(/\s*[\s,]\s*/);
-    return array1.filter((value) => array2.includes(value)).filter(Boolean);
+  parseInput(input: string[]): { seeds: any[]; maps: any[] } {
+    const seeds = this.parseSeeds(input[0]);
+
+    const maps = this.parseConversion(input.slice(2));
+
+    return { seeds, maps };
   }
 
-  isDigit(str: string): boolean {
-    return !Number.isNaN(parseInt(str.replace(/^\D+/g, '')));
+  parseConversion(data: string[]): any[] {
+    let arr: any[] = [],
+      maps: any[] = [];
+    let count = 0;
+
+    while (count <= data.length) {
+      const line = data[count];
+      if (line && line.trim()) {
+        if (!Number.isNaN(this.getDigit(line))) {
+          const [dest, source, range] = line.split(/\s*[\s,]\s*/);
+          arr.push({
+            sourceStart: Number(source),
+            sourceEnd: Number(source) + Number(range),
+            destStart: Number(dest),
+            destEnd: Number(dest) + Number(range),
+          });
+        }
+      } else {
+        maps.push(arr);
+        arr = [];
+      }
+      count++;
+    }
+    return maps;
+  }
+
+  parseSeeds(line: string): any[] {
+    const [_, seeds] = line.split(':');
+    return seeds
+      .trim()
+      .split(/\s*[\s,]\s*/)
+      .map((str) => this.getDigit(str));
+  }
+
+  getDigit(str: string): number {
+    return parseInt(str.replace(/^\D+/g, ''));
   }
 
   parseRow(data: any): any[] {
