@@ -32,27 +32,37 @@ Card 6: 31 18 13 56 72 | 74 77 10 23 35 67 36 11`;
   }
 
   start(data: string[]): number {
-    let total = 0;
+    let instances = 1;
+    const map = new Map<number, number>();
 
-    data.forEach((line) => {
-      total += this.getCardValue(line);
+    map.set(0, instances);
+    data.forEach((line, i) => {
+      const matchNum = this.getMatchNum(line);
+
+      if (matchNum > 0) {
+        let count = i;
+        const prevInst = map.get(i)!;
+        while (count < i + matchNum) {
+          const idx = count + 1;
+          instances = map.has(idx) ? map.get(idx)! + prevInst : prevInst + 1;
+          map.set(idx, instances);
+          count++;
+        }
+      } else {
+        instances = map.has(i) ? map.get(i)! : 1;
+        map.set(i, instances);
+        i < data.length - 1 && !map.has(i + 1) && map.set(i + 1, 1);
+      }
     });
-    return total;
+    return Array.from(map.values()).reduce((total, inst) => total + inst, 0);
   }
 
-  getCardValue(card: string): number {
-    let value = 0;
-
+  getMatchNum(card: string): number {
     const [_, numList] = card.split(':');
     const [winningNums, yourNums] = numList.split('|');
 
     const result = this.findIntersection(winningNums, yourNums);
-    if (result.length) {
-      result.forEach((_, i) => {
-        value = i > 0 ? value * 2 : 1;
-      });
-    }
-    return value;
+    return result.length;
   }
 
   findIntersection(str1: string, str2: string): string[] {
