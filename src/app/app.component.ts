@@ -68,7 +68,6 @@ humidity-to-location map:
       dest = seed;
       maps.forEach((map) => {
         dest = this.mapValue(map, dest);
-        const s = null;
       });
       if (min > dest) min = dest;
     });
