@@ -28,40 +28,78 @@ Distance:  9  40  200`;
   }
 
   start(data: string[]): number {
-    const arr = this.parseInput(data);
-    let total = 1;
-
-    arr.forEach((item) => {
-      total *= this.countOptions(item);
-    });
-    return total;
+    const { time, distance } = this.parseInput(data);
+    return this.countOptions(0, time, distance);
   }
 
-  countOptions(race: { time: number; distance: number }): number {
-    let count = 0;
+  countOptions(startTime: number, endTime: number, distance: number): number {
+    const mid = Math.ceil((endTime - startTime) / 2);
+    const start = this.countLeft(startTime, mid, endTime, distance);
+    const end = this.countRight(mid + 1, endTime, endTime, distance);
 
-    for (let i = 0; i <= race.time; i++) {
-      const dist = (race.time - i) * i;
-      if (dist > race.distance) count++;
+    return end - start + 1;
+  }
+
+  countLeft(
+    startTime: number,
+    endTime: number,
+    totalTime: number,
+    distance: number
+  ): number {
+    if (endTime - startTime === 0) {
+      return startTime;
     }
 
-    return count;
+    const mid = Math.ceil((endTime - startTime) / 2);
+    if ((totalTime - mid) * mid > distance) {
+      return this.countLeft(startTime, mid, totalTime, distance);
+    }
+
+    let count = mid;
+    while (count <= endTime) {
+      if ((totalTime - count) * count > distance) {
+        return count;
+      }
+      count++;
+    }
+
+    return -1;
   }
 
-  parseInput(data: string[]): { time: number; distance: number }[] {
+  countRight(
+    startTime: number,
+    endTime: number,
+    totalTime: number,
+    distance: number
+  ): number {
+    if (endTime - startTime === 0) {
+      return startTime;
+    }
+
+    const mid = startTime + Math.ceil((endTime - startTime) / 2);
+    if ((totalTime - mid) * mid > distance) {
+      return this.countRight(mid, endTime, totalTime, distance);
+    }
+
+    let count = mid;
+    while (count >= startTime) {
+      if ((totalTime - count) * count > distance) {
+        return count;
+      }
+      count--;
+    }
+
+    return -1;
+  }
+
+  parseInput(data: string[]): { time: number; distance: number } {
     const [_t, timeStr] = data[0].split(':');
-    const timeArr = timeStr
-      .trim()
-      .split(/\s*[\s,]\s*/)
-      .map((str) => this.getDigit(str));
-
     const [_d, distStr] = data[1].split(':');
-    const distanceArr = distStr
-      .trim()
-      .split(/\s*[\s,]\s*/)
-      .map((str) => this.getDigit(str));
 
-    return timeArr.map((time, i) => ({ time, distance: distanceArr[i] }));
+    return {
+      time: Number(timeStr.replace(/ /g, '')),
+      distance: Number(distStr.replace(/ /g, '')),
+    };
   }
 
   getDigit(str: string): number {
