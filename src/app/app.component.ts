@@ -60,30 +60,74 @@ humidity-to-location map:
 
   start(data: string[]): number {
     let min = Infinity;
-    let dest = -1;
 
     const { seeds, maps } = this.parseInput(data);
 
     seeds.forEach((seed) => {
-      dest = seed;
-      maps.forEach((map) => {
-        dest = this.mapValue(map, dest);
-        const s = null;
-      });
-      if (min > dest) min = dest;
+      const localMin = this.mapCategories(maps, seed);
+      if (localMin < min) {
+        min = localMin;
+      }
     });
     return min;
   }
 
-  mapValue(map: any[], source: number): number {
-    const section = map.find(
-      (sec) => source >= sec.sourceStart && source <= sec.sourceEnd
-    );
-    if (section) {
-      const gap = source - section.sourceStart;
-      return section.destStart + gap;
+  mapCategories(maps: any[][], seed: { start: number; end: number }): number {
+    let queue: any[] = [];
+    queue.push(seed);
+
+    maps.forEach((map) => {
+      queue = this.mapCategory(map, queue);
+    });
+
+    let min = Infinity;
+    queue.forEach((sec) => {
+      if (sec.start < min) min = sec.start;
+    });
+    return min;
+  }
+
+  mapCategory(map: any[], arr: { start: number; end: number }[]): any[] {
+    let queue: any[] = [],
+      temp: any[] = [...arr];
+
+    while (temp.length) {
+      const s = temp.shift();
+      const section = map.find(
+        (sec) => s.start >= sec.sourceStart && s.start < sec.sourceEnd
+      );
+      if (section) {
+        if (s.end <= section.sourceEnd) {
+          queue.push({
+            start: this.mapValue(section, s.start),
+            end: this.mapValue(section, s.end),
+          });
+        } else {
+          queue.push({
+            start: this.mapValue(section, s.start),
+            end: this.mapValue(section, section.sourceEnd),
+          });
+          temp.push({
+            start: section.sourceEnd,
+            end: s.end,
+          });
+        }
+      } else {
+        queue.push({
+          start: s.start,
+          end: s.end,
+        });
+      }
     }
-    return source
+    return queue;
+  }
+
+  mapValue(
+    section: { sourceStart: number; sourceEnd: number; destStart: number },
+    source: number
+  ): number {
+    const gap = source - section.sourceStart;
+    return section.destStart + gap;
   }
 
   parseInput(input: string[]): { seeds: any[]; maps: any[] } {
@@ -122,10 +166,19 @@ humidity-to-location map:
 
   parseSeeds(line: string): any[] {
     const [_, seeds] = line.split(':');
-    return seeds
+    const sets = seeds
       .trim()
       .split(/\s*[\s,]\s*/)
       .map((str) => this.getDigit(str));
+
+    const arr: any[] = [];
+    for (let i = 0; i < sets.length - 1; i += 2) {
+      arr.push({
+        start: sets[i],
+        end: sets[i] + sets[i + 1],
+      });
+    }
+    return arr;
   }
 
   getDigit(str: string): number {
