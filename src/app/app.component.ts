@@ -1,9 +1,6 @@
 import { Component, inject, NgZone, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-const LEFT = 'L';
-const RIGHT = 'R';
-
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -12,11 +9,9 @@ const RIGHT = 'R';
   styleUrl: './app.component.css',
 })
 export class AppComponent {
-  input = `LLR
-
-AAA = (BBB, BBB)
-BBB = (AAA, ZZZ)
-ZZZ = (ZZZ, ZZZ)`;
+  input = `0 3 6 9 12 15
+1 3 6 10 15 21
+10 13 16 21 30 45`;
 
   result = signal('');
   ngZone = inject(NgZone);
@@ -34,41 +29,24 @@ ZZZ = (ZZZ, ZZZ)`;
   }
 
   start(data: string[]): number {
-    const { seq, network } = this.parseInput(data);
-    return this.lookup(seq, network);
+    let total = 0;
+    data.map((line) => {
+      const list = line.split(/\s*[\s,]\s*/).map((str) => Number(str));
+      total += this.extrapolateValue(list);
+    });
+    return total;
   }
 
-  lookup(seq: string, network: Map<string, any>): number {
-    let count = 0;
-    let start = 'AAA';
-    while (true) {
-      let i = 0;
-      while (i < seq.length) {
-        const val = network.get(start);
-        start = seq[i] === LEFT ? val.left : val.right;
-        count++;
-        if (start === 'ZZZ') return count;
-        i++;
-      }
+  extrapolateValue(arr: number[]): number {
+    if (arr.every((num) => num === 0)) return 0;
+
+    let count = 1,
+      list = [];
+    while (count < arr.length) {
+      list.push(arr[count] - arr[count - 1]);
+      count++
     }
-  }
-
-  parseInput(data: string[]) {
-    const seq = data[0];
-
-    let count = 2;
-    const network = new Map();
-    while (count < data.length) {
-      const [node, neighbors] = data[count].split(' = ');
-      const [left, right] = neighbors.split(',');
-      network.set(node, {
-        left: left.replace(/[()]/g, '').trim(),
-        right: right.replace(/[()]/g, '').trim(),
-      });
-      count++;
-    }
-
-    return { seq, network };
+    return this.extrapolateValue(list) + arr[arr.length - 1];
   }
 
   getDigit(str: string): number {
