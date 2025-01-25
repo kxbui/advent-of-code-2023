@@ -41,7 +41,10 @@ QQQJA 483`;
   start(data: string[]): number {
     let arr = this.parseInput(data);
 
-    arr = arr.map((item) => ({ ...item, type: this.getType(item.hand) }));
+    arr = arr.map((item) => ({
+      ...item,
+      type: this.getTypeWithWildcards(item.hand),
+    }));
 
     arr.sort(this.sortTypes);
 
@@ -55,6 +58,13 @@ QQQJA 483`;
     if (a.type < b.type) return -1;
     if (a.type > b.type) return 1;
 
+    return this.compareTwoCards(a, b);
+  };
+
+  compareTwoCards = (
+    a: { type: number; hand: string },
+    b: { type: number; hand: string }
+  ): number => {
     let count = 0;
     while (count < a.hand.length) {
       const val = this.compareCard(a.hand[count], b.hand[count]);
@@ -66,6 +76,7 @@ QQQJA 483`;
 
   compareCard(card1: string, card2: string): number {
     const arr = [
+      'J',
       '2',
       '3',
       '4',
@@ -75,7 +86,6 @@ QQQJA 483`;
       '8',
       '9',
       'T',
-      'J',
       'Q',
       'K',
       'A',
@@ -85,6 +95,28 @@ QQQJA 483`;
     const idx2 = arr.findIndex((str) => card2 === str);
 
     return idx1 - idx2;
+  }
+
+  getTypeWithWildcards(hand: string): number {
+    const orgType = this.getType(hand);
+
+    let newHand = '';
+    const arr = this.groupTypes(hand);
+    if (hand.includes('J') && orgType < FIVE_OF_A_KIND) {
+      if (orgType === FOUR_OF_A_KIND)
+        newHand = this.handleFourOfAKindWildcards(arr);
+      else if (orgType === FULL_HOUSE)
+        newHand = this.handleFullHouseWildcards(arr);
+      else if (orgType === THREE_OF_A_KIND)
+        newHand = this.handleThreeOfAKindWildcards(arr);
+      else if (orgType === TWO_PAIR) newHand = this.handleTwoPairWildcards(arr);
+      else if (orgType === ONE_PAIR) newHand = this.handleOnePairWildcards(arr);
+      else if (orgType === HIGH_CARD)
+        newHand = this.handleHighCardWildcards(arr);
+      
+      return this.getType(newHand);
+    }
+    return orgType;
   }
 
   getType(hand: string): number {
@@ -98,6 +130,62 @@ QQQJA 483`;
     else if (this.isOnePair(arr)) return ONE_PAIR;
     else if (this.isHighCard(arr)) return HIGH_CARD;
     return -1;
+  }
+
+  handleFourOfAKindWildcards(arr: any[]): string {
+    if (arr[0].includes('J')) {
+      return [arr[0].replaceAll('J', arr[1][0]), arr[1]].join('');
+    }
+    return [arr[0], arr[1].replaceAll('J', arr[0])].join('');
+  }
+
+  handleFullHouseWildcards(arr: any[]): string {
+    if (arr[0].includes('J')) {
+      return [arr[0].replaceAll('J', arr[1][0]), arr[1]].join('');
+    }
+    return [arr[0], arr[1].replaceAll('J', arr[0])].join('');
+  }
+
+  handleThreeOfAKindWildcards(arr: any[]): string {
+    if (arr[0].includes('J')) {
+      return [arr[0].replaceAll('J', arr[2][0]), arr[1], arr[2]].join('');
+    } else if (arr[1].includes('J')) {
+      return [arr[1].replaceAll('J', arr[2][0]), arr[0], arr[2]].join('');
+    }
+    return [arr[2].replaceAll('J', arr[1]), arr[0], arr[1]].join('');
+  }
+
+  handleTwoPairWildcards(arr: any[]): string {
+    if (arr[0].includes('J')) {
+      return [arr[0].replaceAll('J', arr[2][0]), arr[1], arr[2]].join('');
+    } else if (arr[1].includes('J')) {
+      return [arr[1].replaceAll('J', arr[2][0]), arr[0], arr[2]].join('');
+    }
+    return [arr[2].replaceAll('J', arr[1][0]), arr[0], arr[1]].join('');
+  }
+
+  handleOnePairWildcards(arr: any[]): string {
+    if (arr[0].includes('J')) {
+      return [arr[0].replaceAll('J', arr[3][0]), arr[1], arr[2], arr[3]].join(
+        ''
+      );
+    } else if (arr[1].includes('J')) {
+      return [arr[1].replaceAll('J', arr[3][0]), arr[0], arr[2], arr[3]].join(
+        ''
+      );
+    } else if (arr[2].includes('J')) {
+      return [arr[2].replaceAll('J', arr[3][0]), arr[0], arr[1], arr[3]].join(
+        ''
+      );
+    }
+    return [arr[3].replaceAll('J', arr[2]), arr[0], arr[1], arr[2]].join('');
+  }
+
+  handleHighCardWildcards(arr: any[]): string {
+    const temp = [...arr];
+    const idx = arr.findIndex((str) => str.includes('J'));
+    temp[idx] = idx - 1 < 0 ? temp[idx + 1] : temp[idx - 1];
+    return temp.join('');
   }
 
   isFiveOfAKind(arr: any[]) {
