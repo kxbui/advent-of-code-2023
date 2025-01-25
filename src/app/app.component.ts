@@ -1,6 +1,9 @@
 import { Component, inject, NgZone, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
+/**
+ * Use BFS
+ */
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -9,9 +12,11 @@ import { FormsModule } from '@angular/forms';
   styleUrl: './app.component.css',
 })
 export class AppComponent {
-  input = `0 3 6 9 12 15
-1 3 6 10 15 21
-10 13 16 21 30 45`;
+  input = `..F7.
+.FJ|.
+SJ.L7
+|F--J
+LJ...`;
 
   result = signal('');
   ngZone = inject(NgZone);
@@ -21,32 +26,162 @@ export class AppComponent {
 
     this.ngZone.runOutsideAngular(() => {
       setTimeout(() => {
-        const data = this.parseRow(this.input);
+        const data = this.parseRow(this.input).map((line) => line.split(''));
         const total = this.start(data);
         this.result.set(`${total}`);
       }, 0);
     });
   }
 
-  start(data: string[]): number {
-    let total = 0;
-    data.map((line) => {
-      const list = line.split(/\s*[\s,]\s*/).map((str) => Number(str));
-      total += this.extrapolateValue(list);
-    });
-    return total;
+  start(data: string[][]): number {
+    return this.countSteps(this.search(data, this.findLoc(data, 'S')!));
   }
 
-  extrapolateValue(arr: number[]): number {
-    if (arr.every((num) => num === 0)) return 0;
+  search(
+    map: any[][],
+    start: { row: number; col: number }
+  ): { row: number; col: number; parent: any } | null {
+    const visited = new Set();
+    const queue: any[] = [];
 
-    let count = 1,
-      list = [];
-    while (count < arr.length) {
-      list.push(arr[count] - arr[count - 1]);
-      count++
+    visited.add(this.formatLoc(start));
+    this.findStartingPaths(map, start).forEach((loc) => queue.push(loc));
+
+    while (queue.length) {
+      const s = queue.shift();
+      if (s) {
+        if (visited.has(this.formatLoc(s))) {
+          return s;
+        }
+        const paths = this.findPaths(map, s);
+        paths
+          .filter((path) => !visited.has(this.formatLoc(path)))
+          .forEach((path) => {
+            const node = { ...path, parent: s };
+            queue.push(node);
+          });
+      }
+      visited.add(this.formatLoc(s));
     }
-    return this.extrapolateValue(list) + arr[arr.length - 1];
+
+    return null;
+  }
+
+  countSteps(node: { parent: any; row: number; col: number } | null): number {
+    if (!node) return 0;
+
+    let curr = node,
+      count = 0;
+
+    while (curr) {
+      count++;
+      curr = curr.parent;
+    }
+
+    return count;
+  }
+
+  findPaths(map: any[][], curr: { row: number; col: number }): any[] {
+    const arr: any[] = [];
+
+    switch (map[curr.row][curr.col]) {
+      case '|':
+        arr.push({ row: curr.row - 1, col: curr.col });
+        arr.push({ row: curr.row + 1, col: curr.col });
+        break;
+      case '-':
+        arr.push({ row: curr.row, col: curr.col - 1 });
+        arr.push({ row: curr.row, col: curr.col + 1 });
+        break;
+      case 'L':
+        arr.push({ row: curr.row - 1, col: curr.col });
+        arr.push({ row: curr.row, col: curr.col + 1 });
+        break;
+      case 'J':
+        arr.push({ row: curr.row - 1, col: curr.col });
+        arr.push({ row: curr.row, col: curr.col - 1 });
+        break;
+      case '7':
+        arr.push({ row: curr.row + 1, col: curr.col });
+        arr.push({ row: curr.row, col: curr.col - 1 });
+        break;
+      case 'F':
+        arr.push({ row: curr.row + 1, col: curr.col });
+        arr.push({ row: curr.row, col: curr.col + 1 });
+        break;
+    }
+
+    return arr;
+  }
+
+  findStartingPaths(map: any[][], curr: { row: number; col: number }): any[] {
+    let node = null;
+    const arr: any[] = [];
+
+    // north
+    node = { row: curr.row - 1, col: curr.col };
+    this.canMove(map, node, ['|', '7', 'F']) && arr.push(node);
+
+    // south
+    node = { row: curr.row + 1, col: curr.col };
+    this.canMove(map, node, ['|', 'L', 'J']) && arr.push(node);
+
+    // west
+    node = { row: curr.row, col: curr.col - 1 };
+    this.canMove(map, node, ['-', 'L', 'F']) && arr.push(node);
+
+    // south
+    node = { row: curr.row, col: curr.col + 1 };
+    this.canMove(map, node, ['-', 'J', '7']) && arr.push(node);
+
+    return arr;
+  }
+
+  canMove(
+    map: any[][],
+    node: { row: number; col: number },
+    types: string[]
+  ): boolean {
+    return (
+      this.validNode(map, node) &&
+      !this.isGround(map, node) &&
+      this.hasPipe(map, node, types)
+    );
+  }
+
+  hasPipe(
+    map: any[][],
+    node: { row: number; col: number },
+    types: string[]
+  ): boolean {
+    return types.some((type) => map[node.row][node.col] === type);
+  }
+
+  findLoc(map: string[][], type: string): { row: number; col: number } | null {
+    for (let r = 0; r < map.length; r++) {
+      for (let c = 0; c < map[0].length; c++) {
+        if (map[r][c] === type) return { row: r, col: c };
+      }
+    }
+
+    return null;
+  }
+
+  validNode(map: string[][], curr: { row: number; col: number }): boolean {
+    return (
+      curr.row >= 0 &&
+      curr.row < map.length &&
+      curr.col >= 0 &&
+      curr.col < map[0].length
+    );
+  }
+
+  isGround(map: string[][], curr: { row: number; col: number }): boolean {
+    return map[curr.row][curr.col] === '.';
+  }
+
+  formatLoc(currPos: { row: number; col: number }) {
+    return [currPos.row, currPos.col].join('-');
   }
 
   getDigit(str: string): number {
