@@ -44,9 +44,9 @@ export class AppComponent {
       list = [];
     while (count < arr.length) {
       list.push(arr[count] - arr[count - 1]);
-      count++
+      count++;
     }
-    return this.extrapolateValue(list) + arr[arr.length - 1];
+    return arr[0] - this.extrapolateValue(list);
   }
 
   getDigit(str: string): number {
