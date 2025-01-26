@@ -7,8 +7,6 @@ import { FormsModule } from '@angular/forms';
  * to determine a point is inside or
  * outside the loop
  */
-
-// 31
 @Component({
   selector: 'app-root',
   standalone: true,
