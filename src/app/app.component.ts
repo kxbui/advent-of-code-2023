@@ -3,7 +3,12 @@ import { FormsModule } from '@angular/forms';
 
 /**
  * Use BFS
+ * Use Point-In-Polygon algorithm
+ * to determine a point is inside or
+ * outside the loop
  */
+
+// 31
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -12,11 +17,15 @@ import { FormsModule } from '@angular/forms';
   styleUrl: './app.component.css',
 })
 export class AppComponent {
-  input = `..F7.
-.FJ|.
-SJ.L7
-|F--J
-LJ...`;
+  input = `...........
+.S-------7.
+.|F-----7|.
+.||.....||.
+.||.....||.
+.|L-7.F-J|.
+.|..|.|..|.
+.L--J.L--J.
+...........`;
 
   result = signal('');
   ngZone = inject(NgZone);
@@ -34,24 +43,29 @@ LJ...`;
   }
 
   start(data: string[][]): number {
-    return this.countSteps(this.search(data, this.findLoc(data, 'S')!));
+    return this.countEnclosedTiles(
+      data,
+      this.search(data, this.findLoc(data, 'S')!)
+    );
   }
 
-  search(
-    map: any[][],
-    start: { row: number; col: number }
-  ): { row: number; col: number; parent: any } | null {
-    const visited = new Set();
+  search(map: any[][], start: { row: number; col: number }): Set<string> {
+    const visited = new Map<string, any>();
     const queue: any[] = [];
 
-    visited.add(this.formatLoc(start));
+    visited.set(this.formatLoc(start), start);
     this.findStartingPaths(map, start).forEach((loc) => queue.push(loc));
 
     while (queue.length) {
       const s = queue.shift();
       if (s) {
         if (visited.has(this.formatLoc(s))) {
-          return s;
+          const remainingPath = visited.get(this.formatLoc(s));
+          return new Set([
+            this.formatLoc(start),
+            ...this.reconstructPath(s).reverse(),
+            ...this.reconstructPath(remainingPath),
+          ]);
         }
         const paths = this.findPaths(map, s);
         paths
@@ -61,21 +75,79 @@ LJ...`;
             queue.push(node);
           });
       }
-      visited.add(this.formatLoc(s));
+      visited.set(this.formatLoc(s), s);
     }
 
-    return null;
+    return new Set();
   }
 
-  countSteps(node: { parent: any; row: number; col: number } | null): number {
-    if (!node) return 0;
+  reconstructPath(
+    node: { parent: any; row: number; col: number } | null
+  ): any[] {
+    if (!node) return [];
 
     let curr = node,
-      count = 0;
+      path = [];
 
     while (curr) {
-      count++;
+      path.push(this.formatLoc({ row: curr.row, col: curr.col }));
       curr = curr.parent;
+    }
+
+    return path;
+  }
+
+  isPointInPolygon(
+    point: { x: number; y: number },
+    polygon: { x: number; y: number }[]
+  ) {
+    const num_vertices = polygon.length;
+    const x = point.x;
+    const y = point.y;
+    let inside = false;
+
+    let p1 = polygon[0];
+    let p2;
+
+    for (let i = 1; i <= num_vertices; i++) {
+      p2 = polygon[i % num_vertices];
+
+      if (y > Math.min(p1.y, p2.y)) {
+        if (y <= Math.max(p1.y, p2.y)) {
+          if (x <= Math.max(p1.x, p2.x)) {
+            const x_intersection =
+              ((y - p1.y) * (p2.x - p1.x)) / (p2.y - p1.y) + p1.x;
+
+            if (p1.x === p2.x || x <= x_intersection) {
+              inside = !inside;
+            }
+          }
+        }
+      }
+
+      p1 = p2;
+    }
+
+    return inside;
+  }
+
+  countEnclosedTiles(map: any[][], polygon: Set<string>): number {
+    let count = 0;
+
+    const arr = Array.from(polygon).map((item) => {
+      const [row, col] = item.split('-');
+      return { x: Number(col), y: Number(row) };
+    });
+    for (let r = 0; r < map.length; r++) {
+      for (let c = 0; c < map[0].length; c++) {
+        if (
+          this.isGround(map, { row: r, col: c }) ||
+          !polygon.has(this.formatLoc({ row: r, col: c }))
+        ) {
+          const inside = this.isPointInPolygon({ x: c, y: r }, arr);
+          count += inside ? 1 : 0;
+        }
+      }
     }
 
     return count;
