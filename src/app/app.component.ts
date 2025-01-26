@@ -1,6 +1,9 @@
 import { Component, inject, NgZone, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
+const EMPTY_SPACE = '.';
+const GALAXY = '#';
+
 /**
  * Use BFS
  */
@@ -12,11 +15,16 @@ import { FormsModule } from '@angular/forms';
   styleUrl: './app.component.css',
 })
 export class AppComponent {
-  input = `..F7.
-.FJ|.
-SJ.L7
-|F--J
-LJ...`;
+  input = `...#......
+.......#..
+#.........
+..........
+......#...
+.#........
+.........#
+..........
+.......#..
+#...#.....`;
 
   result = signal('');
   ngZone = inject(NgZone);
@@ -34,26 +42,41 @@ LJ...`;
   }
 
   start(data: string[][]): number {
-    return this.countSteps(this.search(data, this.findLoc(data, 'S')!));
+    const map = this.expandMap(data);
+    return this.findShortestPaths(map);
+  }
+
+  findShortestPaths(map: any[][]): number {
+    const galaxies = this.getAllGalaxies(map);
+
+    let total = 0;
+    for (let x = 0; x < galaxies.length - 1; x++) {
+      for (let y = x + 1; y < galaxies.length; y++) {
+        total += this.search(map, galaxies[x], galaxies[y]);
+      }
+    }
+
+    return total;
   }
 
   search(
     map: any[][],
-    start: { row: number; col: number }
-  ): { row: number; col: number; parent: any } | null {
-    const visited = new Set();
+    start: { row: number; col: number },
+    end: { row: number; col: number }
+  ): number {
+    const visited = new Map<string, any>();
     const queue: any[] = [];
 
-    visited.add(this.formatLoc(start));
-    this.findStartingPaths(map, start).forEach((loc) => queue.push(loc));
+    visited.set(this.formatLoc(start), start);
+    this.findPaths(start, end).forEach((loc) => queue.push(loc));
 
     while (queue.length) {
       const s = queue.shift();
       if (s) {
-        if (visited.has(this.formatLoc(s))) {
-          return s;
+        if (s.row === end.row && s.col === end.col) {
+          return this.countSteps(s);
         }
-        const paths = this.findPaths(map, s);
+        const paths = this.findPaths(s, end);
         paths
           .filter((path) => !visited.has(this.formatLoc(path)))
           .forEach((path) => {
@@ -61,14 +84,14 @@ LJ...`;
             queue.push(node);
           });
       }
-      visited.add(this.formatLoc(s));
+      visited.set(this.formatLoc(s), s);
     }
 
-    return null;
+    return 0;
   }
 
   countSteps(node: { parent: any; row: number; col: number } | null): number {
-    if (!node) return 0;
+    if (!node) 0;
 
     let curr = node,
       count = 0;
@@ -81,103 +104,86 @@ LJ...`;
     return count;
   }
 
-  findPaths(map: any[][], curr: { row: number; col: number }): any[] {
-    const arr: any[] = [];
-
-    switch (map[curr.row][curr.col]) {
-      case '|':
-        arr.push({ row: curr.row - 1, col: curr.col });
-        arr.push({ row: curr.row + 1, col: curr.col });
-        break;
-      case '-':
-        arr.push({ row: curr.row, col: curr.col - 1 });
-        arr.push({ row: curr.row, col: curr.col + 1 });
-        break;
-      case 'L':
-        arr.push({ row: curr.row - 1, col: curr.col });
-        arr.push({ row: curr.row, col: curr.col + 1 });
-        break;
-      case 'J':
-        arr.push({ row: curr.row - 1, col: curr.col });
-        arr.push({ row: curr.row, col: curr.col - 1 });
-        break;
-      case '7':
-        arr.push({ row: curr.row + 1, col: curr.col });
-        arr.push({ row: curr.row, col: curr.col - 1 });
-        break;
-      case 'F':
-        arr.push({ row: curr.row + 1, col: curr.col });
-        arr.push({ row: curr.row, col: curr.col + 1 });
-        break;
+  findPaths(
+    curr: { row: number; col: number },
+    end: { row: number; col: number }
+  ): any[] {
+    if (curr.row < end.row) {
+      return [{ row: curr.row + 1, col: curr.col }];
     }
 
-    return arr;
+    if (curr.col > end.col) {
+      return [{ row: curr.row, col: curr.col - 1 }];
+    }
+
+    if (curr.col < end.col) {
+      return [{ row: curr.row, col: curr.col + 1 }];
+    }
+
+    return [];
   }
 
-  findStartingPaths(map: any[][], curr: { row: number; col: number }): any[] {
-    let node = null;
-    const arr: any[] = [];
-
-    // north
-    node = { row: curr.row - 1, col: curr.col };
-    this.canMove(map, node, ['|', '7', 'F']) && arr.push(node);
-
-    // south
-    node = { row: curr.row + 1, col: curr.col };
-    this.canMove(map, node, ['|', 'L', 'J']) && arr.push(node);
-
-    // west
-    node = { row: curr.row, col: curr.col - 1 };
-    this.canMove(map, node, ['-', 'L', 'F']) && arr.push(node);
-
-    // south
-    node = { row: curr.row, col: curr.col + 1 };
-    this.canMove(map, node, ['-', 'J', '7']) && arr.push(node);
-
-    return arr;
-  }
-
-  canMove(
-    map: any[][],
-    node: { row: number; col: number },
-    types: string[]
-  ): boolean {
-    return (
-      this.validNode(map, node) &&
-      !this.isGround(map, node) &&
-      this.hasPipe(map, node, types)
-    );
-  }
-
-  hasPipe(
-    map: any[][],
-    node: { row: number; col: number },
-    types: string[]
-  ): boolean {
-    return types.some((type) => map[node.row][node.col] === type);
-  }
-
-  findLoc(map: string[][], type: string): { row: number; col: number } | null {
+  getAllGalaxies(map: string[][]): { row: number; col: number }[] {
+    const arr = [];
     for (let r = 0; r < map.length; r++) {
       for (let c = 0; c < map[0].length; c++) {
-        if (map[r][c] === type) return { row: r, col: c };
+        if (map[r][c] === GALAXY) arr.push({ row: r, col: c });
       }
     }
-
-    return null;
+    return arr;
   }
 
-  validNode(map: string[][], curr: { row: number; col: number }): boolean {
-    return (
-      curr.row >= 0 &&
-      curr.row < map.length &&
-      curr.col >= 0 &&
-      curr.col < map[0].length
-    );
+  expandMap(map: string[][]): string[][] {
+    let arr = this.expandRows(map);
+    arr = this.expandCols(arr);
+
+    return arr;
   }
 
-  isGround(map: string[][], curr: { row: number; col: number }): boolean {
-    return map[curr.row][curr.col] === '.';
+  expandRows(map: string[][]): string[][] {
+    let r = 0;
+
+    let arr = [...map];
+
+    while (r < arr.length) {
+      let hasGalaxy = false;
+      for (let c = 0; c < arr[0].length; c++) {
+        if (arr[r][c] === GALAXY) {
+          hasGalaxy = true;
+          break;
+        }
+      }
+      if (!hasGalaxy) {
+        arr.splice(r, 0, Array(map[0].length).fill(EMPTY_SPACE));
+      }
+      r += !hasGalaxy ? 2 : 1;
+    }
+
+    return arr;
+  }
+
+  expandCols(map: string[][]): string[][] {
+    let c = 0;
+
+    let arr: any[] = [...map];
+
+    while (c < arr[0].length) {
+      let hasGalaxy = false;
+      for (let r = 0; r < arr.length; r++) {
+        if (arr[r][c] === GALAXY) {
+          hasGalaxy = true;
+          break;
+        }
+      }
+      if (!hasGalaxy) {
+        for (let r = 0; r < arr.length; r++) {
+          arr[r].splice(c, 0, EMPTY_SPACE);
+        }
+      }
+      c += !hasGalaxy ? 2 : 1;
+    }
+
+    return arr;
   }
 
   formatLoc(currPos: { row: number; col: number }) {
