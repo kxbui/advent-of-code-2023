@@ -1,7 +1,7 @@
 import { Component, inject, NgZone, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-const EMPTY_SPACE = '.';
+const EXPANSION = 1000000;
 const GALAXY = '#';
 
 /**
@@ -42,17 +42,20 @@ export class AppComponent {
   }
 
   start(data: string[][]): number {
-    const map = this.expandMap(data);
-    return this.findShortestPaths(map);
+    const expansion = this.expandMap(data);
+    return this.findShortestPaths(data, expansion);
   }
 
-  findShortestPaths(map: any[][]): number {
+  findShortestPaths(
+    map: any[][],
+    expansion: { rows: number[]; cols: number[] }
+  ): number {
     const galaxies = this.getAllGalaxies(map);
 
     let total = 0;
     for (let x = 0; x < galaxies.length - 1; x++) {
       for (let y = x + 1; y < galaxies.length; y++) {
-        total += this.search(map, galaxies[x], galaxies[y]);
+        total += this.search(galaxies[x], galaxies[y], expansion);
       }
     }
 
@@ -60,9 +63,9 @@ export class AppComponent {
   }
 
   search(
-    map: any[][],
     start: { row: number; col: number },
-    end: { row: number; col: number }
+    end: { row: number; col: number },
+    expansion: { rows: number[]; cols: number[] }
   ): number {
     const visited = new Map<string, any>();
     const queue: any[] = [];
@@ -74,7 +77,7 @@ export class AppComponent {
       const s = queue.shift();
       if (s) {
         if (s.row === end.row && s.col === end.col) {
-          return this.countSteps(s);
+          return this.countSteps(s, expansion);
         }
         const paths = this.findPaths(s, end);
         paths
@@ -90,14 +93,19 @@ export class AppComponent {
     return 0;
   }
 
-  countSteps(node: { parent: any; row: number; col: number } | null): number {
+  countSteps(
+    node: { parent: any; row: number; col: number } | null,
+    expansion: { rows: number[]; cols: number[] }
+  ): number {
     if (!node) 0;
 
     let curr = node,
       count = 0;
 
     while (curr) {
-      count++;
+      expansion.rows.includes(curr.row) || expansion.cols.includes(curr.col)
+        ? (count += EXPANSION)
+        : count++;
       curr = curr.parent;
     }
 
@@ -133,54 +141,51 @@ export class AppComponent {
     return arr;
   }
 
-  expandMap(map: string[][]): string[][] {
-    let arr = this.expandRows(map);
-    arr = this.expandCols(arr);
+  expandMap(map: string[][]): { rows: number[]; cols: number[] } {
+    const rows = this.expandRows(map);
+    const cols = this.expandCols(map);
 
-    return arr;
+    return { rows, cols };
   }
 
-  expandRows(map: string[][]): string[][] {
+  expandRows(map: string[][]): number[] {
     let r = 0;
 
-    let arr = [...map];
-
-    while (r < arr.length) {
+    const arr = [];
+    while (r < map.length) {
       let hasGalaxy = false;
-      for (let c = 0; c < arr[0].length; c++) {
-        if (arr[r][c] === GALAXY) {
+      for (let c = 0; c < map[0].length; c++) {
+        if (map[r][c] === GALAXY) {
           hasGalaxy = true;
           break;
         }
       }
       if (!hasGalaxy) {
-        arr.splice(r, 0, Array(map[0].length).fill(EMPTY_SPACE));
+        arr.push(r);
       }
-      r += !hasGalaxy ? 2 : 1;
+      r++;
     }
 
     return arr;
   }
 
-  expandCols(map: string[][]): string[][] {
+  expandCols(map: string[][]): number[] {
     let c = 0;
 
-    let arr: any[] = [...map];
+    let arr = [];
 
-    while (c < arr[0].length) {
+    while (c < map[0].length) {
       let hasGalaxy = false;
-      for (let r = 0; r < arr.length; r++) {
-        if (arr[r][c] === GALAXY) {
+      for (let r = 0; r < map.length; r++) {
+        if (map[r][c] === GALAXY) {
           hasGalaxy = true;
           break;
         }
       }
       if (!hasGalaxy) {
-        for (let r = 0; r < arr.length; r++) {
-          arr[r].splice(c, 0, EMPTY_SPACE);
-        }
+        arr.push(c);
       }
-      c += !hasGalaxy ? 2 : 1;
+      c++;
     }
 
     return arr;
