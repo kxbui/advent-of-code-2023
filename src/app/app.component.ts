@@ -1,12 +1,10 @@
 import { Component, inject, NgZone, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-const EMPTY_SPACE = '.';
-const GALAXY = '#';
+const UNKNOWN = '?';
+const DAMAGED = '#';
+const OPERATIONAL = '.';
 
-/**
- * Use BFS
- */
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -15,16 +13,12 @@ const GALAXY = '#';
   styleUrl: './app.component.css',
 })
 export class AppComponent {
-  input = `...#......
-.......#..
-#.........
-..........
-......#...
-.#........
-.........#
-..........
-.......#..
-#...#.....`;
+  input = `???.### 1,1,3
+.??..??...?##. 1,1,3
+?#?#?#?#?#?#?#? 1,3,1,6
+????.#...#... 4,1,1
+????.######..#####. 1,6,5
+?###???????? 3,2,1`;
 
   result = signal('');
   ngZone = inject(NgZone);
@@ -34,154 +28,62 @@ export class AppComponent {
 
     this.ngZone.runOutsideAngular(() => {
       setTimeout(() => {
-        const data = this.parseRow(this.input).map((line) => line.split(''));
+        const data = this.parseRow(this.input);
         const total = this.start(data);
         this.result.set(`${total}`);
       }, 0);
     });
   }
 
-  start(data: string[][]): number {
-    const map = this.expandMap(data);
-    return this.findShortestPaths(map);
-  }
-
-  findShortestPaths(map: any[][]): number {
-    const galaxies = this.getAllGalaxies(map);
-
+  start(data: string[]): number {
+    const arr = this.parseInput(data);
     let total = 0;
-    for (let x = 0; x < galaxies.length - 1; x++) {
-      for (let y = x + 1; y < galaxies.length; y++) {
-        total += this.search(map, galaxies[x], galaxies[y]);
-      }
-    }
+
+    arr.forEach((line) => {
+      total += this.countArrangements(line.spring, line.size, 0);
+    });
 
     return total;
   }
 
-  search(
-    map: any[][],
-    start: { row: number; col: number },
-    end: { row: number; col: number }
-  ): number {
-    const visited = new Map<string, any>();
-    const queue: any[] = [];
+  countArrangements(spring: string, size: string, total: number): number {
+    const unknownIdx = spring.indexOf(UNKNOWN);
 
-    visited.set(this.formatLoc(start), start);
-    this.findPaths(start, end).forEach((loc) => queue.push(loc));
-
-    while (queue.length) {
-      const s = queue.shift();
-      if (s) {
-        if (s.row === end.row && s.col === end.col) {
-          return this.countSteps(s);
-        }
-        const paths = this.findPaths(s, end);
-        paths
-          .filter((path) => !visited.has(this.formatLoc(path)))
-          .forEach((path) => {
-            const node = { ...path, parent: s };
-            queue.push(node);
-          });
-      }
-      visited.set(this.formatLoc(s), s);
+    if (unknownIdx < 0) {
+      return this.matchSize(spring, size);
     }
 
-    return 0;
+    return (
+      this.countArrangements(
+        spring.replace(UNKNOWN, OPERATIONAL),
+        size,
+        total
+      ) + this.countArrangements(spring.replace(UNKNOWN, DAMAGED), size, total)
+    );
   }
 
-  countSteps(node: { parent: any; row: number; col: number } | null): number {
-    if (!node) 0;
-
-    let curr = node,
-      count = 0;
-
-    while (curr) {
-      count++;
-      curr = curr.parent;
-    }
-
-    return count;
-  }
-
-  findPaths(
-    curr: { row: number; col: number },
-    end: { row: number; col: number }
-  ): any[] {
-    if (curr.row < end.row) {
-      return [{ row: curr.row + 1, col: curr.col }];
-    }
-
-    if (curr.col > end.col) {
-      return [{ row: curr.row, col: curr.col - 1 }];
-    }
-
-    if (curr.col < end.col) {
-      return [{ row: curr.row, col: curr.col + 1 }];
-    }
-
-    return [];
-  }
-
-  getAllGalaxies(map: string[][]): { row: number; col: number }[] {
+  matchSize(spring: string, size: string): number {
     const arr = [];
-    for (let r = 0; r < map.length; r++) {
-      for (let c = 0; c < map[0].length; c++) {
-        if (map[r][c] === GALAXY) arr.push({ row: r, col: c });
+    let count = 0;
+
+    for (let i = 0; i <= spring.length; i++) {
+      if (i === spring.length) count > 0 && arr.push(count);
+      else if (spring[i] === DAMAGED) count++;
+      else {
+        count > 0 && arr.push(count);
+        count = 0;
       }
     }
-    return arr;
+    return Number(arr.join(',') === size);
   }
 
-  expandMap(map: string[][]): string[][] {
-    let arr = this.expandRows(map);
-    arr = this.expandCols(arr);
+  parseInput(data: string[]): { spring: string; size: string }[] {
+    const arr: any[] = [];
 
-    return arr;
-  }
-
-  expandRows(map: string[][]): string[][] {
-    let r = 0;
-
-    let arr = [...map];
-
-    while (r < arr.length) {
-      let hasGalaxy = false;
-      for (let c = 0; c < arr[0].length; c++) {
-        if (arr[r][c] === GALAXY) {
-          hasGalaxy = true;
-          break;
-        }
-      }
-      if (!hasGalaxy) {
-        arr.splice(r, 0, Array(map[0].length).fill(EMPTY_SPACE));
-      }
-      r += !hasGalaxy ? 2 : 1;
-    }
-
-    return arr;
-  }
-
-  expandCols(map: string[][]): string[][] {
-    let c = 0;
-
-    let arr: any[] = [...map];
-
-    while (c < arr[0].length) {
-      let hasGalaxy = false;
-      for (let r = 0; r < arr.length; r++) {
-        if (arr[r][c] === GALAXY) {
-          hasGalaxy = true;
-          break;
-        }
-      }
-      if (!hasGalaxy) {
-        for (let r = 0; r < arr.length; r++) {
-          arr[r].splice(c, 0, EMPTY_SPACE);
-        }
-      }
-      c += !hasGalaxy ? 2 : 1;
-    }
+    data.forEach((line) => {
+      const [spring, size] = line.split(' ');
+      arr.push({ spring, size });
+    });
 
     return arr;
   }
