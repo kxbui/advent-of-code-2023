@@ -1,10 +1,6 @@
 import { Component, inject, NgZone, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-const UNKNOWN = '?';
-const DAMAGED = '#';
-const OPERATIONAL = '.';
-
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -13,12 +9,21 @@ const OPERATIONAL = '.';
   styleUrl: './app.component.css',
 })
 export class AppComponent {
-  input = `???.### 1,1,3
-.??..??...?##. 1,1,3
-?#?#?#?#?#?#?#? 1,3,1,6
-????.#...#... 4,1,1
-????.######..#####. 1,6,5
-?###???????? 3,2,1`;
+  input = `#.##..##.
+..#.##.#.
+##......#
+##......#
+..#.##.#.
+..##..##.
+#.#.##.#.
+
+#...##..#
+#....#..#
+..##..###
+#####.##.
+#####.##.
+..##..###
+#....#..#`;
 
   result = signal('');
   ngZone = inject(NgZone);
@@ -36,55 +41,95 @@ export class AppComponent {
   }
 
   start(data: string[]): number {
-    const arr = this.parseInput(data);
     let total = 0;
+    const list = this.parseInput(data);
 
-    arr.forEach((line) => {
-      total += this.countArrangements(line.spring, line.size, 0);
+    list.forEach((pattern) => {
+      total += this.countReflection(pattern);
     });
 
     return total;
   }
 
-  countArrangements(spring: string, size: string, total: number): number {
-    const unknownIdx = spring.indexOf(UNKNOWN);
-
-    if (unknownIdx < 0) {
-      return this.matchSize(spring, size);
-    }
-
-    return (
-      this.countArrangements(
-        spring.replace(UNKNOWN, OPERATIONAL),
-        size,
-        total
-      ) + this.countArrangements(spring.replace(UNKNOWN, DAMAGED), size, total)
-    );
+  countReflection(arr: string[]): number {
+    const vert = this.countVertical(arr);
+    const horz = this.countHorizontal(arr);
+    return vert + 100 * horz;
   }
 
-  matchSize(spring: string, size: string): number {
-    const arr = [];
-    let count = 0;
+  countVertical(arr: string[]): number {
+    const map = new Map<number, string>();
+    for (let c = 0; c < arr[0].length; c++) {
+      let str = '';
+      for (let r = 0; r < arr.length; r++) {
+        str += arr[r][c];
+      }
+      map.set(c, str);
+    }
 
-    for (let i = 0; i <= spring.length; i++) {
-      if (i === spring.length) count > 0 && arr.push(count);
-      else if (spring[i] === DAMAGED) count++;
-      else {
-        count > 0 && arr.push(count);
-        count = 0;
+    for (let c = 0; c < arr[0].length - 1; c++) {
+      if (this.compareStr(map.get(c), map.get(c + 1))) {
+        if (this.checkReflection(map, c)) {
+          return c + 1;
+        }
       }
     }
-    return Number(arr.join(',') === size);
+
+    return 0;
   }
 
-  parseInput(data: string[]): { spring: string; size: string }[] {
-    const arr: any[] = [];
+  countHorizontal(arr: string[]): number {
+    const map = new Map(arr.map((str, i) => [i, str]));
 
-    data.forEach((line) => {
-      const [spring, size] = line.split(' ');
-      arr.push({ spring, size });
-    });
+    for (let r = 0; r < arr.length - 1; r++) {
+      if (this.compareStr(arr[r], arr[r + 1])) {
+        if (this.checkReflection(map, r)) {
+          return r + 1;
+        }
+      }
+    }
+    return 0;
+  }
 
+  checkReflection(map: Map<number, string>, midIdx: number): boolean {
+    let sideA = midIdx,
+      sideB = midIdx + 1;
+
+    while (sideA >= 0) {
+      const valA = map.get(sideA);
+      const valB = map.get(sideB);
+
+      if (valA && valB && !this.compareStr(valA, valB)) {
+        return false;
+      }
+
+      sideA--;
+      sideB++;
+    }
+
+    return true;
+  }
+
+  compareStr(str1: string | undefined, str2: string | undefined): boolean {
+    return str1 === str2;
+  }
+
+  parseInput(input: string[]): any[][] {
+    const arr: any[][][] = [];
+    let count = 0,
+      temp: any[] = [];
+
+    while (count <= input.length) {
+      if (count === input.length) {
+        arr.push(temp);
+      } else if (input[count].trim()) {
+        temp.push(input[count]);
+      } else {
+        arr.push(temp);
+        temp = [];
+      }
+      count++;
+    }
     return arr;
   }
 
