@@ -68,8 +68,10 @@ export class AppComponent {
     }
 
     for (let c = 0; c < arr[0].length - 1; c++) {
-      if (this.compareStr(map.get(c), map.get(c + 1))) {
-        if (this.checkReflection(map, c)) {
+      const diff = this.countDifferentChars(map.get(c), map.get(c + 1));
+      if (diff === 0 || diff === 1) {
+        const smudge = this.countSmudge(map, c);
+        if (smudge.diff === 1 && smudge.count === 1) {
           return c + 1;
         }
       }
@@ -82,8 +84,10 @@ export class AppComponent {
     const map = new Map(arr.map((str, i) => [i, str]));
 
     for (let r = 0; r < arr.length - 1; r++) {
-      if (this.compareStr(arr[r], arr[r + 1])) {
-        if (this.checkReflection(map, r)) {
+      const diff = this.countDifferentChars(map.get(r), map.get(r + 1));
+      if (diff === 0 || diff === 1) {
+        const smudge = this.countSmudge(map, r);
+        if (smudge.diff === 1 && smudge.count === 1) {
           return r + 1;
         }
       }
@@ -91,23 +95,41 @@ export class AppComponent {
     return 0;
   }
 
-  checkReflection(map: Map<number, string>, midIdx: number): boolean {
+  countSmudge(
+    map: Map<number, string>,
+    midIdx: number
+  ): { idx: number; diff: number; count: number } {
     let sideA = midIdx,
-      sideB = midIdx + 1;
+      sideB = midIdx + 1,
+      count = 0,
+      result = { idx: -1, diff: -1 };
 
     while (sideA >= 0) {
       const valA = map.get(sideA);
       const valB = map.get(sideB);
 
       if (valA && valB && !this.compareStr(valA, valB)) {
-        return false;
+        result = { idx: sideA, diff: this.countDifferentChars(valA, valB) };
+        count++;
       }
 
       sideA--;
       sideB++;
     }
 
-    return true;
+    return { ...result, count };
+  }
+
+  countDifferentChars(str1: string = '', str2: string = ''): number {
+    let count = 0;
+
+    for (let i = 0; i < str1.length; i++) {
+      if (str1[i] !== str2[i]) {
+        count++;
+      }
+    }
+
+    return count;
   }
 
   compareStr(str1: string | undefined, str2: string | undefined): boolean {
