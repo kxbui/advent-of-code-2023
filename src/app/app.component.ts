@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 const UNKNOWN = '?';
 const DAMAGED = '#';
 const OPERATIONAL = '.';
+const NUM_COPIES = 5;
 
 @Component({
   selector: 'app-root',
@@ -37,52 +38,136 @@ export class AppComponent {
 
   start(data: string[]): number {
     const arr = this.parseInput(data);
+    const map = new Map<string, number>();
     let total = 0;
 
     arr.forEach((line) => {
-      total += this.countArrangements(line.spring, line.size, 0);
+      const spring = Array(NUM_COPIES).fill(line.spring).join(UNKNOWN);
+      const groups = Array(NUM_COPIES).fill(line.groups).join(',').split(',');
+
+      total += this.countArrangements(spring, groups, map);
     });
 
     return total;
   }
 
-  countArrangements(spring: string, size: string, total: number): number {
-    const unknownIdx = spring.indexOf(UNKNOWN);
-
-    if (unknownIdx < 0) {
-      return this.matchSize(spring, size);
+  countArrangements(
+    spring: string,
+    groups: string[],
+    map: Map<string, number>
+  ): number {
+    if (!groups.length) {
+      return Number(!spring.includes(DAMAGED));
     }
 
-    return (
-      this.countArrangements(
-        spring.replace(UNKNOWN, OPERATIONAL),
-        size,
-        total
-      ) + this.countArrangements(spring.replace(UNKNOWN, DAMAGED), size, total)
-    );
+    if (!spring.length) {
+      return 0;
+    }
+
+    const firstChar = spring[0];
+
+    switch (firstChar) {
+      case OPERATIONAL:
+        return this.handleOprChar(spring, groups, map);
+      case DAMAGED:
+        return this.handleDamagedChar(spring, groups, map);
+      case UNKNOWN:
+        return (
+          this.handleOprChar(spring, groups, map) +
+          this.handleDamagedChar(spring, groups, map)
+        );
+    }
+    return 0;
   }
 
-  matchSize(spring: string, size: string): number {
-    const arr = [];
-    let count = 0;
+  handleOprChar(
+    spring: string,
+    groups: string[],
+    map: Map<string, number>
+  ): number {
+    const newSpring = spring.substring(1);
+    const mapKey = this.formatMapKey(newSpring, groups);
+    if (map.has(mapKey))
+      return map.get(mapKey)!;
+    const result = this.countArrangements(spring.substring(1), groups, map);
+    map.set(mapKey, result);
+    return result;
+  }
 
-    for (let i = 0; i <= spring.length; i++) {
-      if (i === spring.length) count > 0 && arr.push(count);
-      else if (spring[i] === DAMAGED) count++;
-      else {
-        count > 0 && arr.push(count);
-        count = 0;
+  handleDamagedChar(
+    spring: string,
+    groups: string[],
+    map: Map<string, number>
+  ): number {
+    const mapKey = this.formatMapKey(spring, groups);
+    if (map.has(mapKey))
+      return map.get(mapKey)!;
+
+    const firstGroup = Number(groups[0]);
+    const damagedNum = this.countChar(
+      this.replaceStr(
+        spring.substring(0, firstGroup),
+        UNKNOWN,
+        DAMAGED,
+      ),
+      DAMAGED
+    );
+
+    // If the next group can't fit all the damaged springs, then abort
+    if (damagedNum != firstGroup) return 0;
+
+    const nextSpring = spring.substring(firstGroup);
+
+    // If the rest of the record is just the last group
+    if (!nextSpring) {
+      if (groups.length === 1) {
+        map.set(mapKey, 1);
+        return 1;
+      } else {
+        map.set(mapKey, 0);
+        return 0;
       }
     }
-    return Number(arr.join(',') === size);
+
+    // Make sure the character that follows this group is .
+    if ([OPERATIONAL].includes(nextSpring[0])) {
+      return this.countArrangements(nextSpring, groups.slice(1), map);
+    }
+
+    // if the character that follows this group is ? make sure it is .
+    if ([UNKNOWN].includes(nextSpring[0])) {
+      return this.handleOprChar(
+        nextSpring.replace(UNKNOWN, OPERATIONAL),
+        groups.slice(1),
+        map
+      );
+    }
+
+    return 0;
   }
 
-  parseInput(data: string[]): { spring: string; size: string }[] {
+  formatMapKey(spring: string, groups: string[]): string {
+    return `${spring} ${groups}`;
+  }
+
+  countChar(str: string, char: string): number {
+    return str.split('').filter((s) => s === char).length;
+  }
+
+  replaceStr(
+    str: string,
+    searchValue: string,
+    replaceWith: string
+  ): string {
+    return str.replaceAll(searchValue, replaceWith);
+  }
+
+  parseInput(data: string[]): { spring: string; groups: string }[] {
     const arr: any[] = [];
 
     data.forEach((line) => {
-      const [spring, size] = line.split(' ');
-      arr.push({ spring, size });
+      const [spring, groups] = line.split(' ');
+      arr.push({ spring, groups });
     });
 
     return arr;
