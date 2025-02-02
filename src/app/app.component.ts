@@ -9,7 +9,16 @@ import { FormsModule } from '@angular/forms';
   styleUrl: './app.component.css',
 })
 export class AppComponent {
-  input = `rn=1,cm-,qp=3,cm=2,qp-,pc=4,ot=9,ab=5,pc-,pc=6,ot=7`;
+  input = `.|...\\....
+|.-.\\.....
+.....|-...
+........|.
+..........
+.........\\
+..../.\\\\..
+.-.-/..|..
+.|....-|.\\
+..//.|....`;
 
   result = signal('');
   ngZone = inject(NgZone);
@@ -19,41 +28,209 @@ export class AppComponent {
 
     this.ngZone.runOutsideAngular(() => {
       setTimeout(() => {
-        const data = this.input.split(',');
+        const data = this.parseRow(this.input).map((line) => line.split(''));
         const total = this.start(data);
         this.result.set(`${total}`);
       }, 0);
     });
   }
 
-  start(data: string[]): number {
-    let total = 0;
-
-    data.forEach((step) => {
-      total += this.runHASH(step, 0);
-    });
-    return total;
+  start(data: string[][]): number {
+    return this.search(data, { row: 0, col: 0, direction: 'E' });
   }
 
-  runHASH(str: string, total: number): number {
-    if (!str.trim()) return total;
+  search(
+    map: any[][],
+    start: { row: number; col: number; direction: string }
+  ): number {
+    const visited = new Set<string>();
+    const queue: any[] = [];
 
-    const char = str.at(0);
-    let value = total;
+    queue.push(start);
 
-    value += this.getASCII(char!);
-    value *= 17;
-    value = value % 256;
+    while (queue.length) {
+      const s = queue.shift();
+      if (s) {
+        const paths = this.findPaths(map, s);
+        paths
+          .filter((path) => !visited.has(this.formatLoc(path)))
+          .forEach((path) => {
+            const node = { ...path };
+            queue.push(node);
+          });
+      }
+      visited.add(this.formatLoc(s));
+    }
 
-    return this.runHASH(str.substring(1), value);
+    const locations = new Set(
+      Array.from(visited.values()).map((val: string) => {
+        const [r, c] = val.split('-');
+        return this.formatLoc({ row: Number(r), col: Number(c) });
+      })
+    );
+    return locations.size;
   }
 
-  getASCII(str: string): number {
-    return str.charCodeAt(0);
+  findPaths(
+    map: any[][],
+    curr: { row: number; col: number; direction: string }
+  ): any[] {
+    const arr: any[] = [];
+
+    switch (map[curr.row][curr.col]) {
+      case '.':
+        return this.handleEmptySpace(map, curr);
+      case '/':
+        return this.handleForwardMirror(map, curr);
+      case '\\':
+        return this.handleBackwardMirror(map, curr);
+      case '|':
+        return this.handleVerticalSplitter(map, curr);
+      case '-':
+        return this.handleHorizontalSplitter(map, curr);
+    }
+
+    return arr;
   }
 
-  formatLoc(currPos: { row: number; col: number }) {
-    return [currPos.row, currPos.col].join('-');
+  handleEmptySpace(
+    map: any[][],
+    curr: { row: number; col: number; direction: string }
+  ): any[] {
+    switch (curr.direction) {
+      case 'N':
+        return this.validNodes(map, [
+          { ...curr, row: curr.row - 1, col: curr.col },
+        ]);
+      case 'S':
+        return this.validNodes(map, [
+          { ...curr, row: curr.row + 1, col: curr.col },
+        ]);
+      case 'E':
+        return this.validNodes(map, [
+          { ...curr, row: curr.row, col: curr.col + 1 },
+        ]);
+      case 'W':
+        return this.validNodes(map, [
+          { ...curr, row: curr.row, col: curr.col - 1 },
+        ]);
+    }
+    return [];
+  }
+
+  handleForwardMirror(
+    map: any[][],
+    curr: { row: number; col: number; direction: string }
+  ): any[] {
+    switch (curr.direction) {
+      case 'N':
+        return this.validNodes(map, [
+          { row: curr.row, col: curr.col + 1, direction: 'E' },
+        ]);
+      case 'S':
+        return this.validNodes(map, [
+          { row: curr.row, col: curr.col - 1, direction: 'W' },
+        ]);
+      case 'E':
+        return this.validNodes(map, [
+          { row: curr.row - 1, col: curr.col, direction: 'N' },
+        ]);
+      case 'W':
+        return this.validNodes(map, [
+          { row: curr.row + 1, col: curr.col, direction: 'S' },
+        ]);
+    }
+    return [];
+  }
+
+  handleBackwardMirror(
+    map: any[][],
+    curr: { row: number; col: number; direction: string }
+  ): any[] {
+    switch (curr.direction) {
+      case 'N':
+        return this.validNodes(map, [
+          { row: curr.row, col: curr.col - 1, direction: 'W' },
+        ]);
+      case 'S':
+        return this.validNodes(map, [
+          { row: curr.row, col: curr.col + 1, direction: 'E' },
+        ]);
+      case 'E':
+        return this.validNodes(map, [
+          { row: curr.row + 1, col: curr.col, direction: 'S' },
+        ]);
+      case 'W':
+        return this.validNodes(map, [
+          { row: curr.row - 1, col: curr.col, direction: 'N' },
+        ]);
+    }
+    return [];
+  }
+
+  handleHorizontalSplitter(
+    map: any[][],
+    curr: { row: number; col: number; direction: string }
+  ): any[] {
+    switch (curr.direction) {
+      case 'N':
+      case 'S':
+        return this.validNodes(map, [
+          { row: curr.row, col: curr.col - 1, direction: 'W' },
+          { row: curr.row, col: curr.col + 1, direction: 'E' },
+        ]);
+      case 'E':
+        return this.validNodes(map, [
+          { ...curr, row: curr.row, col: curr.col + 1 },
+        ]);
+      case 'W':
+        return this.validNodes(map, [
+          { ...curr, row: curr.row, col: curr.col - 1 },
+        ]);
+    }
+    return [];
+  }
+
+  handleVerticalSplitter(
+    map: any[][],
+    curr: { row: number; col: number; direction: string }
+  ): any[] {
+    switch (curr.direction) {
+      case 'N':
+        return this.validNodes(map, [
+          { ...curr, row: curr.row - 1, col: curr.col },
+        ]);
+      case 'S':
+        return this.validNodes(map, [
+          { ...curr, row: curr.row + 1, col: curr.col },
+        ]);
+      case 'E':
+      case 'W':
+        return this.validNodes(map, [
+          { row: curr.row - 1, col: curr.col, direction: 'N' },
+          { row: curr.row + 1, col: curr.col, direction: 'S' },
+        ]);
+    }
+    return [];
+  }
+
+  validNodes(map: any[][], arr: any[]): any[] {
+    return arr.filter((node) => this.validNode(map, node));
+  }
+
+  validNode(map: string[][], curr: { row: number; col: number }): boolean {
+    return (
+      curr.row >= 0 &&
+      curr.row < map.length &&
+      curr.col >= 0 &&
+      curr.col < map[0].length
+    );
+  }
+
+  formatLoc(currPos: { row: number; col: number; direction?: string }) {
+    return [currPos.row, currPos.col, currPos.direction]
+      .filter((val) => val != undefined)
+      .join('-');
   }
 
   getDigit(str: string): number {
