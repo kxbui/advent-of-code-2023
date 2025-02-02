@@ -1,6 +1,10 @@
 import { Component, inject, NgZone, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
+const ROUNDED = 'O';
+const CUBED = '#';
+const EMPTY = '.';
+
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -9,21 +13,16 @@ import { FormsModule } from '@angular/forms';
   styleUrl: './app.component.css',
 })
 export class AppComponent {
-  input = `#.##..##.
-..#.##.#.
-##......#
-##......#
-..#.##.#.
-..##..##.
-#.#.##.#.
-
-#...##..#
-#....#..#
-..##..###
-#####.##.
-#####.##.
-..##..###
-#....#..#`;
+  input = `O....#....
+O.OO#....#
+.....##...
+OO.#O....O
+.O.....O#.
+O.#..O.#.#
+..O..#O..O
+.......O..
+#....###..
+#OO..#....`;
 
   result = signal('');
   ngZone = inject(NgZone);
@@ -33,104 +32,74 @@ export class AppComponent {
 
     this.ngZone.runOutsideAngular(() => {
       setTimeout(() => {
-        const data = this.parseRow(this.input);
+        const data = this.parseRow(this.input).map((line) => line.split(''));
         const total = this.start(data);
         this.result.set(`${total}`);
       }, 0);
     });
   }
 
-  start(data: string[]): number {
+  start(data: string[][]): number {
+    const map = this.tiltPlatform(data);
+    return this.countTotalLoad(map);
+  }
+
+  countTotalLoad(data: string[][]): number {
     let total = 0;
-    const list = this.parseInput(data);
 
-    list.forEach((pattern) => {
-      total += this.countReflection(pattern);
-    });
-
+    for (let r = 0; r < data.length; r++) {
+      let rocks = 0;
+      for (let c = 0; c < data[0].length; c++) {
+        rocks += data[r][c] === ROUNDED ? 1 : 0;
+      }
+      total += rocks * (data.length - r);
+    }
     return total;
   }
 
-  countReflection(arr: string[]): number {
-    const vert = this.countVertical(arr);
-    const horz = this.countHorizontal(arr);
-    return vert + 100 * horz;
-  }
-
-  countVertical(arr: string[]): number {
-    const map = new Map<number, string>();
-    for (let c = 0; c < arr[0].length; c++) {
-      let str = '';
-      for (let r = 0; r < arr.length; r++) {
-        str += arr[r][c];
-      }
-      map.set(c, str);
-    }
-
-    for (let c = 0; c < arr[0].length - 1; c++) {
-      if (this.compareStr(map.get(c), map.get(c + 1))) {
-        if (this.checkReflection(map, c)) {
-          return c + 1;
+  tiltPlatform(map: string[][]): string[][] {
+    for (let c = 0; c < map[0].length; c++) {
+      for (let r = 1; r < map.length; r++) {
+        if (map[r][c] === ROUNDED) {
+          const empty = this.findEmptySpace(map, { row: r, col: c });
+          if (empty) {
+            map = this.swap(
+              map,
+              { row: r, col: c },
+              { row: empty.row, col: empty.col }
+            );
+          }
         }
       }
     }
-
-    return 0;
+    return map;
   }
 
-  countHorizontal(arr: string[]): number {
-    const map = new Map(arr.map((str, i) => [i, str]));
+  findEmptySpace(
+    map: string[][],
+    curr: { row: number; col: number }
+  ): { row: number; col: number } | null {
+    let result = null;
 
-    for (let r = 0; r < arr.length - 1; r++) {
-      if (this.compareStr(arr[r], arr[r + 1])) {
-        if (this.checkReflection(map, r)) {
-          return r + 1;
-        }
+    for (let r = curr.row - 1; r >= 0; r--) {
+      if ([CUBED, ROUNDED].includes(map[r][curr.col])) {
+        return result;
+      } else if (map[r][curr.col] === EMPTY) {
+        result = { row: r, col: curr.col };
       }
     }
-    return 0;
+    return result;
   }
 
-  checkReflection(map: Map<number, string>, midIdx: number): boolean {
-    let sideA = midIdx,
-      sideB = midIdx + 1;
-
-    while (sideA >= 0) {
-      const valA = map.get(sideA);
-      const valB = map.get(sideB);
-
-      if (valA && valB && !this.compareStr(valA, valB)) {
-        return false;
-      }
-
-      sideA--;
-      sideB++;
-    }
-
-    return true;
-  }
-
-  compareStr(str1: string | undefined, str2: string | undefined): boolean {
-    return str1 === str2;
-  }
-
-  parseInput(input: string[]): any[][] {
-    const arr: any[][][] = [];
-    let count = 0,
-      temp: any[] = [];
-
-    while (count <= input.length) {
-      if (count === input.length) {
-        arr.push(temp);
-      } else if (input[count].trim()) {
-        temp.push(input[count]);
-      } else {
-        arr.push(temp);
-        temp = [];
-      }
-      count++;
-    }
-    return arr;
+  swap(
+    map: string[][],
+    obj1: { row: number; col: number },
+    obj2: { row: number; col: number }
+  ): string[][] {
+    const temp = map[obj1.row][obj1.col];
+    map[obj1.row][obj1.col] = map[obj2.row][obj2.col];
+    map[obj2.row][obj2.col] = temp;
+    return map;
   }
 
   formatLoc(currPos: { row: number; col: number }) {
