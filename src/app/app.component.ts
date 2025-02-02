@@ -27,12 +27,71 @@ export class AppComponent {
   }
 
   start(data: string[]): number {
-    let total = 0;
+    let map = new Map<number, any[]>();
 
     data.forEach((step) => {
-      total += this.runHASH(step, 0);
+      map = this.buildLenConfig(map, step);
     });
-    return total;
+
+    return this.calcFocusingPower(map);
+  }
+
+  buildLenConfig(map: Map<number, any[]>, data: string): Map<number, any[]> {
+    if (data.includes('=')) {
+      const [label, focalLength] = data.split('=');
+      return this.addLen(map, label, Number(focalLength));
+    }
+    const [label] = data.split('-');
+    return this.removeLen(map, label);
+  }
+
+  calcFocusingPower(map: Map<number, any[]>): number {
+    return Array.from(map.entries()).reduce((total, [box, lens]) => {
+      return (
+        total +
+        lens.reduce((sum, { focalLength }, i) => {
+          return sum + (box + 1) * (i + 1) * focalLength;
+        }, 0)
+      );
+    }, 0);
+  }
+
+  addLen(
+    map: Map<number, any[]>,
+    label: string,
+    focalLength: number
+  ): Map<number, any[]> {
+    const boxNum = this.runHASH(label, 0);
+    if (!map.has(boxNum)) {
+      map.set(boxNum, [{ label, focalLength }]);
+      return map;
+    }
+    const lens = map.get(boxNum);
+    if (lens) {
+      const idx = lens.findIndex((len) => len.label === label);
+      if (idx >= 0) {
+        const arr = lens.map((len, i) =>
+          i === idx ? { ...len, focalLength } : len
+        );
+        map.set(boxNum, arr);
+      } else {
+        map.set(boxNum, [...lens, { label, focalLength }]);
+      }
+    }
+    return map;
+  }
+
+  removeLen(map: Map<number, any[]>, label: string): Map<number, any[]> {
+    const boxNum = this.runHASH(label, 0);
+    if (!map.has(boxNum)) {
+      return map;
+    }
+    const lens = map.get(boxNum);
+    if (lens) {
+      const arr = lens.filter((len) => len.label !== label);
+      map.set(boxNum, arr);
+    }
+    return map;
   }
 
   runHASH(str: string, total: number): number {
