@@ -36,7 +36,37 @@ export class AppComponent {
   }
 
   start(data: string[][]): number {
-    return this.search(data, { row: 0, col: 0, direction: 'E' });
+    let max = 0;
+
+    // top & bottom
+    for (let c = 0; c < data[0].length; c++) {
+      let count = this.search(data, { row: 0, col: c, direction: 'S' });
+      if (max < count) max = count;
+
+      count = this.search(data, {
+        row: data.length - 1,
+        col: c,
+        direction: 'N',
+      });
+      if (max < count) max = count;
+    }
+
+    // left & right
+    for (let r = 0; r < data.length; r++) {
+      let count = 0;
+      
+      count = this.search(data, { row: r, col: 0, direction: 'E' });
+      if (max < count) max = count;
+
+      count = this.search(data, {
+        row: r,
+        col: data[0].length - 1,
+        direction: 'W',
+      });
+      if (max < count) max = count;
+    }
+
+    return max;
   }
 
   search(
