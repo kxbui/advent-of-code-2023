@@ -1,10 +1,6 @@
 import { Component, inject, NgZone, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-const ROUNDED = 'O';
-const CUBED = '#';
-const EMPTY = '.';
-
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -13,16 +9,7 @@ const EMPTY = '.';
   styleUrl: './app.component.css',
 })
 export class AppComponent {
-  input = `O....#....
-O.OO#....#
-.....##...
-OO.#O....O
-.O.....O#.
-O.#..O.#.#
-..O..#O..O
-.......O..
-#....###..
-#OO..#....`;
+  input = `rn=1,cm-,qp=3,cm=2,qp-,pc=4,ot=9,ab=5,pc-,pc=6,ot=7`;
 
   result = signal('');
   ngZone = inject(NgZone);
@@ -32,74 +19,37 @@ O.#..O.#.#
 
     this.ngZone.runOutsideAngular(() => {
       setTimeout(() => {
-        const data = this.parseRow(this.input).map((line) => line.split(''));
+        const data = this.input.split(',');
         const total = this.start(data);
         this.result.set(`${total}`);
       }, 0);
     });
   }
 
-  start(data: string[][]): number {
-    const map = this.tiltPlatform(data);
-    return this.countTotalLoad(map);
-  }
-
-  countTotalLoad(data: string[][]): number {
+  start(data: string[]): number {
     let total = 0;
 
-    for (let r = 0; r < data.length; r++) {
-      let rocks = 0;
-      for (let c = 0; c < data[0].length; c++) {
-        rocks += data[r][c] === ROUNDED ? 1 : 0;
-      }
-      total += rocks * (data.length - r);
-    }
+    data.forEach((step) => {
+      total += this.runHASH(step, 0);
+    });
     return total;
   }
 
-  tiltPlatform(map: string[][]): string[][] {
-    for (let c = 0; c < map[0].length; c++) {
-      for (let r = 1; r < map.length; r++) {
-        if (map[r][c] === ROUNDED) {
-          const empty = this.findEmptySpace(map, { row: r, col: c });
-          if (empty) {
-            map = this.swap(
-              map,
-              { row: r, col: c },
-              { row: empty.row, col: empty.col }
-            );
-          }
-        }
-      }
-    }
-    return map;
+  runHASH(str: string, total: number): number {
+    if (!str.trim()) return total;
+
+    const char = str.at(0);
+    let value = total;
+
+    value += this.getASCII(char!);
+    value *= 17;
+    value = value % 256;
+
+    return this.runHASH(str.substring(1), value);
   }
 
-  findEmptySpace(
-    map: string[][],
-    curr: { row: number; col: number }
-  ): { row: number; col: number } | null {
-    let result = null;
-
-    for (let r = curr.row - 1; r >= 0; r--) {
-      if ([CUBED, ROUNDED].includes(map[r][curr.col])) {
-        return result;
-      } else if (map[r][curr.col] === EMPTY) {
-        result = { row: r, col: curr.col };
-      }
-    }
-    return result;
-  }
-
-  swap(
-    map: string[][],
-    obj1: { row: number; col: number },
-    obj2: { row: number; col: number }
-  ): string[][] {
-    const temp = map[obj1.row][obj1.col];
-    map[obj1.row][obj1.col] = map[obj2.row][obj2.col];
-    map[obj2.row][obj2.col] = temp;
-    return map;
+  getASCII(str: string): number {
+    return str.charCodeAt(0);
   }
 
   formatLoc(currPos: { row: number; col: number }) {
