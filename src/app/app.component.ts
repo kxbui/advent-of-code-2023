@@ -2,8 +2,13 @@ import { Component, inject, NgZone, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 /**
- * A* algorthm with
- * priority queue for open list
+ * Use Pick's theorem
+ * Area  = I + B/2 - 1
+ * I : stands for the number of points in the interior of the shape,
+ * B : stands for the number of points on the boundary of the shape.
+ *
+ * In this problem, need to find I
+ * To find Area, use shoelace formula
  */
 @Component({
   selector: 'app-root',
@@ -13,19 +18,20 @@ import { FormsModule } from '@angular/forms';
   styleUrl: './app.component.css',
 })
 export class AppComponent {
-  input = `2413432311323
-3215453535623
-3255245654254
-3446585845452
-4546657867536
-1438598798454
-4457876987766
-3637877979653
-4654967986887
-4564679986453
-1224686865563
-2546548887735
-4322674655533`;
+  input = `R 6 (#70c710)
+D 5 (#0dc571)
+L 2 (#5713f0)
+D 2 (#d2c081)
+R 2 (#59c680)
+D 2 (#411b91)
+L 5 (#8ceee2)
+U 2 (#caa173)
+L 1 (#1b58a2)
+U 2 (#caa171)
+R 2 (#7807d2)
+U 3 (#a77fa3)
+L 2 (#015232)
+U 2 (#7a21e3)`;
 
   result = signal('');
   ngZone = inject(NgZone);
@@ -35,201 +41,76 @@ export class AppComponent {
 
     this.ngZone.runOutsideAngular(() => {
       setTimeout(() => {
-        const data = this.parseRow(this.input).map((line) => line.split(''));
+        const data = this.parseRow(this.input);
         const total = this.start(data);
         this.result.set(`${total}`);
       }, 0);
     });
   }
 
-  start(data: string[][]): number {
-    return this.search(
-      data,
-      { row: 0, col: 0 },
-      { row: data.length - 1, col: data[0].length - 1 }
-    );
-  }
-
-  search(
-    map: any[][],
-    start: { row: number; col: number },
-    end: { row: number; col: number }
-  ): number {
-    const comparator: Comparator<any> = (itemA, itemB) => {
-      return itemB.f - itemA.f;
-    };
-    const keyGetter = (item: any) => this.formatLoc(item.location);
-
-    const open = new PriorityQueue(comparator, keyGetter);
-    open.add({ location: start, f: 0, g: 0 });
-
-    const close = new Set<string>();
-
-    if (start && end) {
-      while (open.size) {
-        const q = open.poll();
-
-        if (q) {
-          if (this.isGoal(q.location, end)) {
-            return q.g;
-          }
-
-          // check all neighbors
-          let neighbors = this.findNeighbors(map, q.location);
-          if (neighbors.length) {
-            const nodes = neighbors
-              .map((neighbor) => {
-                // successor.g = q.g + distance between successor and q
-                const g = q.g + neighbor.g;
-                // successor.h = distance from goal to successor
-                const h = this.calcDistance(neighbor, end);
-                // successor.f = successor.g + successor.h
-                const f = g + h;
-
-                return { location: neighbor, f, parent: q, g };
-              })
-              .filter((neighbor) => {
-                // if a node with the same position as
-                // successor is in the CLOSE list which has a
-                // lower f than successor, skip this successor
-                if (close.has(this.formatLoc(q.location))) {
-                  return false;
-                }
-
-                // if a node with the same position as
-                // successor is in the OPEN list which has a
-                // lower f than successor, skip this successor
-                const itemInOpen = open.find(neighbor);
-
-                if (!itemInOpen) {
-                  return true;
-                }
-
-                // otherwise, add the node to the open list
-                return true;
-              });
-            open.add(...nodes);
-          }
-        }
-        // Move current node from open to closed list
-        close.add(this.formatLoc(q.location));
-      }
-    }
-    return 0;
-  }
-
-  reconstructPath(node: any): Set<string> {
-    const path = new Set<string>();
-    let curr = node;
-
-    while (curr) {
-      const { direction, ...remaining } = curr.location;
-      path.add(this.formatLoc(remaining));
-      console.log(`${this.formatLoc(remaining)} ${curr.g}`);
-      curr = curr.parent;
-    }
-    return path;
-  }
-
-  isGoal(
-    curr: { row: number; col: number },
-    goal: { row: number; col: number }
-  ): boolean {
-    return curr.row === goal.row && curr.col === goal.col;
-  }
-
-  calcDistance(
-    curr: { row: number; col: number },
-    goal: { row: number; col: number }
-  ) {
-    return Math.abs(curr.row - goal.row) + Math.abs(curr.col - goal.col);
+  start(data: string[]): number {
+    const digPlan = this.parseInput(data);
+    return this.findInteriorPoints(digPlan);
   }
 
   /**
-   * Find 6 possible next moves horizontally or vertically
-   * curr: (0, 1, V)
-   * neighbor: (0, 2, H) (0, 3, H) (0, 4, H) (1, 1, V) (2, 1, V) (3, 1, V)
+   * Use Pick's theorem
    */
-  findNeighbors(
-    map: string[][],
-    curr: { row: number; col: number; direction: string }
-  ): any[] {
-    if (curr.direction === 'H') return this.getVertNeighbors(map, curr);
-    else if (curr.direction === 'V') return this.getHorizNeighbors(map, curr);
-    return [
-      ...this.getVertNeighbors(map, curr),
-      ...this.getHorizNeighbors(map, curr),
-    ];
+  findInteriorPoints(data: any[]): number {
+    let nodes: any[] = [],
+      currWidth = 0,
+      currHeight = 0;
+
+    data.forEach(({ direction, amount }) => {
+      const { row, col } = this.getIncrementalAmount(direction);
+      for (let i = 0; i < amount; i++) {
+        currWidth += col;
+        currHeight += row;
+        nodes.push({ row: currHeight, col: currWidth });
+      }
+    });
+
+    const area = this.findArea(nodes);
+    return area + nodes.length / 2 + 1;
   }
 
-  getHorizNeighbors(
-    map: string[][],
-    curr: { row: number; col: number }
-  ): any[] {
-    const arr: any[] = [];
-    let g = 0;
+  /**
+   * Use shoelace formula
+   */
+  findArea(nodes: any[]): number {
+    let sum1 = 0,
+      sum2 = 0;
 
-    for (let i = 1; i <= 3; i++) {
-      const node = { row: curr.row, col: curr.col + i };
-      if (this.validNode(map, node)) {
-        g += Number(map[node.row][node.col]);
-        arr.push({ ...node, g, direction: 'H' });
-      } else {
-        break;
-      }
+    for (let i = 0; i < nodes.length - 1; i++) {
+      sum1 += nodes[i].row * nodes[i + 1].col;
+      sum2 += nodes[i].col * nodes[i + 1].row;
     }
 
-    g = 0;
+    sum1 += nodes[nodes.length - 1].row * nodes[0].col;
+    sum2 += nodes[0].row * nodes[nodes.length - 1].col;
 
-    for (let i = 1; i <= 3; i++) {
-      const node = { row: curr.row, col: curr.col - i };
-      if (this.validNode(map, node)) {
-        g += Number(map[node.row][node.col]);
-        arr.push({ ...node, g, direction: 'H' });
-      } else {
-        break;
-      }
-    }
-
-    return arr;
+    return Math.abs(sum1 - sum2) / 2;
   }
 
-  getVertNeighbors(map: string[][], curr: { row: number; col: number }): any[] {
-    const arr: any[] = [];
-    let g = 0;
-
-    for (let i = 1; i <= 3; i++) {
-      const node = { row: curr.row + i, col: curr.col };
-      if (this.validNode(map, node)) {
-        g += Number(map[node.row][node.col]);
-        arr.push({ ...node, g, direction: 'V' });
-      } else {
-        break;
-      }
+  getIncrementalAmount(direction: string): { row: number; col: number } {
+    switch (direction) {
+      case 'L':
+        return { row: 0, col: -1 };
+      case 'R':
+        return { row: 0, col: 1 };
+      case 'U':
+        return { row: -1, col: 0 };
+      case 'D':
+        return { row: 1, col: 0 };
     }
-
-    g = 0;
-
-    for (let i = 1; i <= 3; i++) {
-      const node = { row: curr.row - i, col: curr.col };
-      if (this.validNode(map, node)) {
-        g += Number(map[node.row][node.col]);
-        arr.push({ ...node, g, direction: 'V' });
-      } else {
-        break;
-      }
-    }
-
-    return arr;
+    return { row: 0, col: 0 };
   }
 
-  validNode(map: string[][], curr: { row: number; col: number }): boolean {
-    return (
-      curr.row >= 0 &&
-      curr.row < map.length &&
-      curr.col >= 0 &&
-      curr.col < map[0].length
-    );
+  parseInput(data: string[]): any[] {
+    return data.map((item) => {
+      const [direction, amount] = item.split(/\s*[\s,]\s*/);
+      return { direction, amount: Number(amount) };
+    });
   }
 
   formatLoc(currPos: { row: number; col: number; direction: string }) {
@@ -256,111 +137,5 @@ export class AppComponent {
       arr2.push(+stringArray[1]);
     });
     return { arr1, arr2 };
-  }
-}
-
-type Comparator<T> = (valueA: T, valueB: T) => number;
-
-const swap = (arr: unknown[], i: number, j: number) => {
-  [arr[i], arr[j]] = [arr[j], arr[i]];
-};
-
-class PriorityQueue<T> {
-  #heap;
-  #isGreater;
-  #keyGetter;
-  // keep a set of nodes for faster retrieval
-  #set;
-
-  constructor(comparator: Comparator<T>, keyGetter: (item: T) => string);
-  constructor(
-    comparator: Comparator<T>,
-    keyGetter: (item: T) => string,
-    init: T[] = []
-  ) {
-    this.#heap = init;
-    this.#isGreater = (a: number, b: number) =>
-      comparator(init[a] as T, init[b] as T) > 0;
-    this.#keyGetter = keyGetter;
-    this.#set = new Set<string>();
-  }
-
-  get size(): number {
-    return this.#heap.length;
-  }
-
-  peek(): T | undefined {
-    return this.#heap[0];
-  }
-
-  add(...arr: T[]): void {
-    if (arr && arr.length) {
-      arr.forEach((val) => {
-        this.#heap.push(val);
-        this.#siftUp();
-        this.#set.add(this.#keyGetter(val));
-      });
-    }
-  }
-
-  find(item: T): boolean {
-    return this.#set.has(this.#keyGetter(item));
-  }
-
-  poll(): T | undefined;
-  poll(
-    heap = this.#heap,
-    value = heap[0],
-    length = heap.length
-  ): T | undefined {
-    if (length) {
-      swap(heap, 0, length - 1);
-    }
-
-    const item = heap.pop();
-    this.#siftDown();
-
-    this.#set.delete(this.#keyGetter(item!));
-
-    return value;
-  }
-
-  print() {
-    console.log(this.#heap.slice());
-  }
-
-  #siftUp(): void;
-  #siftUp(node = this.size - 1, parent = ((node + 1) >>> 1) - 1): void {
-    for (
-      ;
-      node && this.#isGreater(node, parent);
-      node = parent, parent = ((node + 1) >>> 1) - 1
-    ) {
-      swap(this.#heap, node, parent);
-    }
-  }
-
-  #siftDown(): void;
-  #siftDown(size = this.size, node = 0, isGreater = this.#isGreater): void {
-    while (true) {
-      const leftNode = (node << 1) + 1;
-      const rightNode = leftNode + 1;
-
-      if (
-        (leftNode >= size || isGreater(node, leftNode)) &&
-        (rightNode >= size || isGreater(node, rightNode))
-      ) {
-        break;
-      }
-
-      const maxChild =
-        rightNode < size && isGreater(rightNode, leftNode)
-          ? rightNode
-          : leftNode;
-
-      swap(this.#heap, node, maxChild);
-
-      node = maxChild;
-    }
   }
 }
