@@ -1,6 +1,10 @@
 import { Component, inject, NgZone, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
+/**
+ * A* algorthm with
+ * priority queue for open list
+ */
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -9,16 +13,19 @@ import { FormsModule } from '@angular/forms';
   styleUrl: './app.component.css',
 })
 export class AppComponent {
-  input = `.|...\\....
-|.-.\\.....
-.....|-...
-........|.
-..........
-.........\\
-..../.\\\\..
-.-.-/..|..
-.|....-|.\\
-..//.|....`;
+  input = `2413432311323
+3215453535623
+3255245654254
+3446585845452
+4546657867536
+1438598798454
+4457876987766
+3637877979653
+4654967986887
+4564679986453
+1224686865563
+2546548887735
+4322674655533`;
 
   result = signal('');
   ngZone = inject(NgZone);
@@ -36,186 +43,179 @@ export class AppComponent {
   }
 
   start(data: string[][]): number {
-    return this.search(data, { row: 0, col: 0, direction: 'E' });
+    return this.search(
+      data,
+      { row: 0, col: 0 },
+      { row: data.length - 1, col: data[0].length - 1 }
+    );
   }
 
   search(
     map: any[][],
-    start: { row: number; col: number; direction: string }
+    start: { row: number; col: number },
+    end: { row: number; col: number }
   ): number {
-    const visited = new Set<string>();
-    const queue: any[] = [];
+    const comparator: Comparator<any> = (itemA, itemB) => {
+      return itemB.f - itemA.f;
+    };
+    const keyGetter = (item: any) => this.formatLoc(item.location);
 
-    queue.push(start);
+    const open = new PriorityQueue(comparator, keyGetter);
+    open.add({ location: start, f: 0, g: 0 });
 
-    while (queue.length) {
-      const s = queue.shift();
-      if (s) {
-        const paths = this.findPaths(map, s);
-        paths
-          .filter((path) => !visited.has(this.formatLoc(path)))
-          .forEach((path) => {
-            const node = { ...path };
-            queue.push(node);
-          });
+    const close = new Set<string>();
+
+    if (start && end) {
+      while (open.size) {
+        const q = open.poll();
+
+        if (q) {
+          if (this.isGoal(q.location, end)) {
+            return q.g;
+          }
+
+          // check all neighbors
+          let neighbors = this.findNeighbors(map, q.location);
+          if (neighbors.length) {
+            const nodes = neighbors
+              .map((neighbor) => {
+                // successor.g = q.g + distance between successor and q
+                const g = q.g + neighbor.g;
+                // successor.h = distance from goal to successor
+                const h = this.calcDistance(neighbor, end);
+                // successor.f = successor.g + successor.h
+                const f = g + h;
+
+                return { location: neighbor, f, parent: q, g };
+              })
+              .filter((neighbor) => {
+                // if a node with the same position as
+                // successor is in the CLOSE list which has a
+                // lower f than successor, skip this successor
+                if (close.has(this.formatLoc(q.location))) {
+                  return false;
+                }
+
+                // if a node with the same position as
+                // successor is in the OPEN list which has a
+                // lower f than successor, skip this successor
+                const itemInOpen = open.find(neighbor);
+
+                if (!itemInOpen) {
+                  return true;
+                }
+
+                // otherwise, add the node to the open list
+                return true;
+              });
+            open.add(...nodes);
+          }
+        }
+        // Move current node from open to closed list
+        close.add(this.formatLoc(q.location));
       }
-      visited.add(this.formatLoc(s));
     }
-
-    const locations = new Set(
-      Array.from(visited.values()).map((val: string) => {
-        const [r, c] = val.split('-');
-        return this.formatLoc({ row: Number(r), col: Number(c) });
-      })
-    );
-    return locations.size;
+    return 0;
   }
 
-  findPaths(
-    map: any[][],
+  reconstructPath(node: any): Set<string> {
+    const path = new Set<string>();
+    let curr = node;
+
+    while (curr) {
+      const { direction, ...remaining } = curr.location;
+      path.add(this.formatLoc(remaining));
+      console.log(`${this.formatLoc(remaining)} ${curr.g}`);
+      curr = curr.parent;
+    }
+    return path;
+  }
+
+  isGoal(
+    curr: { row: number; col: number },
+    goal: { row: number; col: number }
+  ): boolean {
+    return curr.row === goal.row && curr.col === goal.col;
+  }
+
+  calcDistance(
+    curr: { row: number; col: number },
+    goal: { row: number; col: number }
+  ) {
+    return Math.abs(curr.row - goal.row) + Math.abs(curr.col - goal.col);
+  }
+
+  findNeighbors(
+    map: string[][],
     curr: { row: number; col: number; direction: string }
   ): any[] {
-    const arr: any[] = [];
+    if (curr.direction === 'H') return this.getVertNeighbors(map, curr);
+    else if (curr.direction === 'V') return this.getHorizNeighbors(map, curr);
+    return [
+      ...this.getVertNeighbors(map, curr),
+      ...this.getHorizNeighbors(map, curr),
+    ];
+  }
 
-    switch (map[curr.row][curr.col]) {
-      case '.':
-        return this.handleEmptySpace(map, curr);
-      case '/':
-        return this.handleForwardMirror(map, curr);
-      case '\\':
-        return this.handleBackwardMirror(map, curr);
-      case '|':
-        return this.handleVerticalSplitter(map, curr);
-      case '-':
-        return this.handleHorizontalSplitter(map, curr);
+  getHorizNeighbors(
+    map: string[][],
+    curr: { row: number; col: number }
+  ): any[] {
+    const arr: any[] = [];
+    let g = 0;
+
+    for (let i = 1; i <= 3; i++) {
+      const node = { row: curr.row, col: curr.col + i };
+      if (this.validNode(map, node)) {
+        g += Number(map[node.row][node.col]);
+        arr.push({ ...node, g, direction: 'H' });
+      } else {
+        break;
+      }
+    }
+
+    g = 0;
+
+    for (let i = 1; i <= 3; i++) {
+      const node = { row: curr.row, col: curr.col - i };
+      if (this.validNode(map, node)) {
+        g += Number(map[node.row][node.col]);
+        arr.push({ ...node, g, direction: 'H' });
+      } else {
+        break;
+      }
     }
 
     return arr;
   }
 
-  handleEmptySpace(
-    map: any[][],
-    curr: { row: number; col: number; direction: string }
-  ): any[] {
-    switch (curr.direction) {
-      case 'N':
-        return this.validNodes(map, [
-          { ...curr, row: curr.row - 1, col: curr.col },
-        ]);
-      case 'S':
-        return this.validNodes(map, [
-          { ...curr, row: curr.row + 1, col: curr.col },
-        ]);
-      case 'E':
-        return this.validNodes(map, [
-          { ...curr, row: curr.row, col: curr.col + 1 },
-        ]);
-      case 'W':
-        return this.validNodes(map, [
-          { ...curr, row: curr.row, col: curr.col - 1 },
-        ]);
-    }
-    return [];
-  }
+  getVertNeighbors(map: string[][], curr: { row: number; col: number }): any[] {
+    const arr: any[] = [];
+    let g = 0;
 
-  handleForwardMirror(
-    map: any[][],
-    curr: { row: number; col: number; direction: string }
-  ): any[] {
-    switch (curr.direction) {
-      case 'N':
-        return this.validNodes(map, [
-          { row: curr.row, col: curr.col + 1, direction: 'E' },
-        ]);
-      case 'S':
-        return this.validNodes(map, [
-          { row: curr.row, col: curr.col - 1, direction: 'W' },
-        ]);
-      case 'E':
-        return this.validNodes(map, [
-          { row: curr.row - 1, col: curr.col, direction: 'N' },
-        ]);
-      case 'W':
-        return this.validNodes(map, [
-          { row: curr.row + 1, col: curr.col, direction: 'S' },
-        ]);
+    for (let i = 1; i <= 3; i++) {
+      const node = { row: curr.row + i, col: curr.col };
+      if (this.validNode(map, node)) {
+        g += Number(map[node.row][node.col]);
+        arr.push({ ...node, g, direction: 'V' });
+      } else {
+        break;
+      }
     }
-    return [];
-  }
 
-  handleBackwardMirror(
-    map: any[][],
-    curr: { row: number; col: number; direction: string }
-  ): any[] {
-    switch (curr.direction) {
-      case 'N':
-        return this.validNodes(map, [
-          { row: curr.row, col: curr.col - 1, direction: 'W' },
-        ]);
-      case 'S':
-        return this.validNodes(map, [
-          { row: curr.row, col: curr.col + 1, direction: 'E' },
-        ]);
-      case 'E':
-        return this.validNodes(map, [
-          { row: curr.row + 1, col: curr.col, direction: 'S' },
-        ]);
-      case 'W':
-        return this.validNodes(map, [
-          { row: curr.row - 1, col: curr.col, direction: 'N' },
-        ]);
+    g = 0;
+
+    for (let i = 1; i <= 3; i++) {
+      const node = { row: curr.row - i, col: curr.col };
+      if (this.validNode(map, node)) {
+        g += Number(map[node.row][node.col]);
+        arr.push({ ...node, g, direction: 'V' });
+      } else {
+        break;
+      }
     }
-    return [];
-  }
 
-  handleHorizontalSplitter(
-    map: any[][],
-    curr: { row: number; col: number; direction: string }
-  ): any[] {
-    switch (curr.direction) {
-      case 'N':
-      case 'S':
-        return this.validNodes(map, [
-          { row: curr.row, col: curr.col - 1, direction: 'W' },
-          { row: curr.row, col: curr.col + 1, direction: 'E' },
-        ]);
-      case 'E':
-        return this.validNodes(map, [
-          { ...curr, row: curr.row, col: curr.col + 1 },
-        ]);
-      case 'W':
-        return this.validNodes(map, [
-          { ...curr, row: curr.row, col: curr.col - 1 },
-        ]);
-    }
-    return [];
-  }
-
-  handleVerticalSplitter(
-    map: any[][],
-    curr: { row: number; col: number; direction: string }
-  ): any[] {
-    switch (curr.direction) {
-      case 'N':
-        return this.validNodes(map, [
-          { ...curr, row: curr.row - 1, col: curr.col },
-        ]);
-      case 'S':
-        return this.validNodes(map, [
-          { ...curr, row: curr.row + 1, col: curr.col },
-        ]);
-      case 'E':
-      case 'W':
-        return this.validNodes(map, [
-          { row: curr.row - 1, col: curr.col, direction: 'N' },
-          { row: curr.row + 1, col: curr.col, direction: 'S' },
-        ]);
-    }
-    return [];
-  }
-
-  validNodes(map: any[][], arr: any[]): any[] {
-    return arr.filter((node) => this.validNode(map, node));
+    return arr;
   }
 
   validNode(map: string[][], curr: { row: number; col: number }): boolean {
@@ -227,9 +227,9 @@ export class AppComponent {
     );
   }
 
-  formatLoc(currPos: { row: number; col: number; direction?: string }) {
+  formatLoc(currPos: { row: number; col: number; direction: string }) {
     return [currPos.row, currPos.col, currPos.direction]
-      .filter((val) => val != undefined)
+      .filter((str) => str !== undefined)
       .join('-');
   }
 
@@ -251,5 +251,110 @@ export class AppComponent {
       arr2.push(+stringArray[1]);
     });
     return { arr1, arr2 };
+  }
+}
+
+type Comparator<T> = (valueA: T, valueB: T) => number;
+
+const swap = (arr: unknown[], i: number, j: number) => {
+  [arr[i], arr[j]] = [arr[j], arr[i]];
+};
+
+class PriorityQueue<T> {
+  #heap;
+  #isGreater;
+  #keyGetter;
+  #set;
+
+  constructor(comparator: Comparator<T>, keyGetter: (item: T) => string);
+  constructor(
+    comparator: Comparator<T>,
+    keyGetter: (item: T) => string,
+    init: T[] = []
+  ) {
+    this.#heap = init;
+    this.#isGreater = (a: number, b: number) =>
+      comparator(init[a] as T, init[b] as T) > 0;
+    this.#keyGetter = keyGetter;
+    this.#set = new Set<string>();
+  }
+
+  get size(): number {
+    return this.#heap.length;
+  }
+
+  peek(): T | undefined {
+    return this.#heap[0];
+  }
+
+  add(...arr: T[]): void {
+    if (arr && arr.length) {
+      arr.forEach((val) => {
+        this.#heap.push(val);
+        this.#siftUp();
+        this.#set.add(this.#keyGetter(val));
+      });
+    }
+  }
+
+  find(item: T): boolean {
+    return this.#set.has(this.#keyGetter(item));
+  }
+
+  poll(): T | undefined;
+  poll(
+    heap = this.#heap,
+    value = heap[0],
+    length = heap.length
+  ): T | undefined {
+    if (length) {
+      swap(heap, 0, length - 1);
+    }
+
+    const item = heap.pop();
+    this.#siftDown();
+
+    this.#set.delete(this.#keyGetter(item!));
+
+    return value;
+  }
+
+  print() {
+    console.log(this.#heap.slice());
+  }
+
+  #siftUp(): void;
+  #siftUp(node = this.size - 1, parent = ((node + 1) >>> 1) - 1): void {
+    for (
+      ;
+      node && this.#isGreater(node, parent);
+      node = parent, parent = ((node + 1) >>> 1) - 1
+    ) {
+      swap(this.#heap, node, parent);
+    }
+  }
+
+  #siftDown(): void;
+  #siftDown(size = this.size, node = 0, isGreater = this.#isGreater): void {
+    while (true) {
+      const leftNode = (node << 1) + 1;
+      const rightNode = leftNode + 1;
+
+      if (
+        (leftNode >= size || isGreater(node, leftNode)) &&
+        (rightNode >= size || isGreater(node, rightNode))
+      ) {
+        break;
+      }
+
+      const maxChild =
+        rightNode < size && isGreater(rightNode, leftNode)
+          ? rightNode
+          : leftNode;
+
+      swap(this.#heap, node, maxChild);
+
+      node = maxChild;
+    }
   }
 }
