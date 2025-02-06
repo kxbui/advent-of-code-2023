@@ -1,8 +1,11 @@
 import { Component, inject, NgZone, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
+const MIN_MOVE = 4;
+const MAX_MOVE = 10;
+
 /**
- * A* algorthm with
+ * A* algorithm with
  * priority queue for open list
  */
 @Component({
@@ -71,6 +74,7 @@ export class AppComponent {
 
         if (q) {
           if (this.isGoal(q.location, end)) {
+            this.reconstructPath(q)
             return q.g;
           }
 
@@ -146,9 +150,7 @@ export class AppComponent {
   }
 
   /**
-   * Find 6 possible next moves horizontally or vertically
-   * curr: (0, 1, V)
-   * neighbor: (0, 2, H) (0, 3, H) (0, 4, H) (1, 1, V) (2, 1, V) (3, 1, V)
+   * Find 10 possible next moves horizontally or vertically
    */
   findNeighbors(
     map: string[][],
@@ -166,10 +168,21 @@ export class AppComponent {
     map: string[][],
     curr: { row: number; col: number }
   ): any[] {
-    const arr: any[] = [];
-    let g = 0;
+    let arr: any[] = [];
+    let g = 0, node = null, temp = [];
 
-    for (let i = 1; i <= 3; i++) {
+    for (let i = 1; i <= MIN_MOVE; i++) {
+      node = { row: curr.row, col: curr.col + i };
+      if (this.validNode(map, node)) {
+        g += Number(map[node.row][node.col]);
+        temp.push({ ...node, g, direction: 'H' });
+      } else {
+        break;
+      }
+    }
+    arr = temp.length === MIN_MOVE ?  arr.concat(temp.slice(-1)) : arr;
+
+    for (let i = MIN_MOVE + 1; i <= MAX_MOVE; i++) {
       const node = { row: curr.row, col: curr.col + i };
       if (this.validNode(map, node)) {
         g += Number(map[node.row][node.col]);
@@ -179,9 +192,20 @@ export class AppComponent {
       }
     }
 
-    g = 0;
+    g = 0, temp = [];
 
-    for (let i = 1; i <= 3; i++) {
+    for (let i = 1; i <= MIN_MOVE; i++) {
+      node = { row: curr.row, col: curr.col - i };
+      if (this.validNode(map, node)) {
+        g += Number(map[node.row][node.col]);
+        temp.push({ ...node, g, direction: 'H' });
+      } else {
+        break;
+      }
+    }
+    arr = temp.length === MIN_MOVE ?  arr.concat(temp.slice(-1)) : arr;
+
+    for (let i = MIN_MOVE + 1; i <= MAX_MOVE; i++) {
       const node = { row: curr.row, col: curr.col - i };
       if (this.validNode(map, node)) {
         g += Number(map[node.row][node.col]);
@@ -195,10 +219,21 @@ export class AppComponent {
   }
 
   getVertNeighbors(map: string[][], curr: { row: number; col: number }): any[] {
-    const arr: any[] = [];
-    let g = 0;
+    let arr: any[] = [];
+    let g = 0, node = null, temp = [];
 
-    for (let i = 1; i <= 3; i++) {
+    for (let i = 1; i <= MIN_MOVE; i++) {
+      node = { row: curr.row + i, col: curr.col };
+      if (this.validNode(map, node)) {
+        g += Number(map[node.row][node.col]);
+        temp.push({ ...node, g, direction: 'V' });
+      } else {
+        break;
+      }
+    }
+    arr = temp.length === MIN_MOVE ?  arr.concat(temp.slice(-1)) : arr;
+
+    for (let i = MIN_MOVE + 1; i <= MAX_MOVE; i++) {
       const node = { row: curr.row + i, col: curr.col };
       if (this.validNode(map, node)) {
         g += Number(map[node.row][node.col]);
@@ -208,9 +243,20 @@ export class AppComponent {
       }
     }
 
-    g = 0;
+    g = 0, temp = [];
 
-    for (let i = 1; i <= 3; i++) {
+    for (let i = 1; i <= MIN_MOVE; i++) {
+      node = { row: curr.row - i, col: curr.col };
+      if (this.validNode(map, node)) {
+        g += Number(map[node.row][node.col]);
+        temp.push({ ...node, g, direction: 'V' });
+      } else {
+        break;
+      }
+    }
+    arr = temp.length === MIN_MOVE ?  arr.concat(temp.slice(-1)) : arr;
+
+    for (let i = MIN_MOVE + 1; i <= MAX_MOVE; i++) {
       const node = { row: curr.row - i, col: curr.col };
       if (this.validNode(map, node)) {
         g += Number(map[node.row][node.col]);
