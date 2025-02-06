@@ -74,7 +74,6 @@ export class AppComponent {
 
         if (q) {
           if (this.isGoal(q.location, end)) {
-            this.reconstructPath(q)
             return q.g;
           }
 
