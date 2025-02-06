@@ -145,6 +145,11 @@ export class AppComponent {
     return Math.abs(curr.row - goal.row) + Math.abs(curr.col - goal.col);
   }
 
+  /**
+   * Find 6 possible next moves horizontally or vertically
+   * curr: (0, 1, V)
+   * neighbor: (0, 2, H) (0, 3, H) (0, 4, H) (1, 1, V) (2, 1, V) (3, 1, V)
+   */
   findNeighbors(
     map: string[][],
     curr: { row: number; col: number; direction: string }
@@ -264,6 +269,7 @@ class PriorityQueue<T> {
   #heap;
   #isGreater;
   #keyGetter;
+  // keep a set of nodes for faster retrieval
   #set;
 
   constructor(comparator: Comparator<T>, keyGetter: (item: T) => string);
