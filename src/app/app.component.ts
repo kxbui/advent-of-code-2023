@@ -1,15 +1,6 @@
 import { Component, inject, NgZone, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-/**
- * Use Pick's theorem
- * Area  = I + B/2 - 1
- * I : stands for the number of points in the interior of the shape,
- * B : stands for the number of points on the boundary of the shape.
- *
- * In this problem, need to find I
- * To find Area, use shoelace formula
- */
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -18,20 +9,23 @@ import { FormsModule } from '@angular/forms';
   styleUrl: './app.component.css',
 })
 export class AppComponent {
-  input = `R 6 (#70c710)
-D 5 (#0dc571)
-L 2 (#5713f0)
-D 2 (#d2c081)
-R 2 (#59c680)
-D 2 (#411b91)
-L 5 (#8ceee2)
-U 2 (#caa173)
-L 1 (#1b58a2)
-U 2 (#caa171)
-R 2 (#7807d2)
-U 3 (#a77fa3)
-L 2 (#015232)
-U 2 (#7a21e3)`;
+  input = `px{a<2006:qkq,m>2090:A,rfg}
+pv{a>1716:R,A}
+lnx{m>1548:A,A}
+rfg{s<537:gd,x>2440:R,A}
+qs{s>3448:A,lnx}
+qkq{x<1416:A,crn}
+crn{x>2662:A,R}
+in{s<1351:px,qqz}
+qqz{s>2770:qs,m<1801:hdj,R}
+gd{a>3333:R,R}
+hdj{m>838:A,pv}
+
+{x=787,m=2655,a=1222,s=2876}
+{x=1679,m=44,a=2067,s=496}
+{x=2036,m=264,a=79,s=2244}
+{x=2461,m=1339,a=466,s=291}
+{x=2127,m=1623,a=2188,s=1013}`;
 
   result = signal('');
   ngZone = inject(NgZone);
@@ -49,68 +43,95 @@ U 2 (#7a21e3)`;
   }
 
   start(data: string[]): number {
-    const digPlan = this.parseInput(data);
-    return this.findInteriorPoints(digPlan);
+    const { workflows, ratings } = this.parseInput(data);
+    let total = 0;
+
+    ratings.forEach((rating) => {
+      const result = this.runWorkflow(workflows, rating, 'in');
+      total += result === 'A' ? this.countRatingNumbers(rating) : 0;
+    });
+    return total;
   }
 
-  /**
-   * Use Pick's theorem
-   */
-  findInteriorPoints(data: any[]): number {
-    let nodes: any[] = [],
-      currWidth = 0,
-      currHeight = 0;
+  countRatingNumbers(rating: Map<string, string>): number {
+    return Array.from(rating.values()).reduce(
+      (total, curr) => total + Number(curr),
+      0
+    );
+  }
 
-    data.forEach(({ direction, amount }) => {
-      const { row, col } = this.getIncrementalAmount(direction);
-      for (let i = 0; i < amount; i++) {
-        currWidth += col;
-        currHeight += row;
-        nodes.push({ row: currHeight, col: currWidth });
+  runWorkflow(
+    workflows: Map<string, any[]>,
+    rating: Map<string, string>,
+    startWorkflow: string
+  ): string {
+    if (['A', 'R'].includes(startWorkflow)) {
+      return startWorkflow;
+    }
+
+    const rules = workflows.get(startWorkflow);
+    if (rules?.length) {
+      let count = 0;
+      while (count < rules.length) {
+        const rule = rules[count];
+        if (rule.includes(':')) {
+          const [part, destination] = rule.split(':');
+          const result = this.compare(
+            rating.get(part[0])!,
+            part.substring(2),
+            part[1]
+          );
+          if (result) {
+            return this.runWorkflow(workflows, rating, destination);
+          }
+        }
+        count++;
       }
-    });
-
-    const area = this.findArea(nodes);
-    return area + nodes.length / 2 + 1;
+    }
+    return this.runWorkflow(workflows, rating, rules?.at(-1));
   }
 
-  /**
-   * Use shoelace formula
-   */
-  findArea(nodes: any[]): number {
-    let sum1 = 0,
-      sum2 = 0;
+  compare(a: string, b: string, operator: string): boolean {
+    switch (operator) {
+      case '<':
+        return Number(a) < Number(b);
+      case '>':
+        return Number(a) > Number(b);
+    }
+    return false;
+  }
 
-    for (let i = 0; i < nodes.length - 1; i++) {
-      sum1 += nodes[i].row * nodes[i + 1].col;
-      sum2 += nodes[i].col * nodes[i + 1].row;
+  parseInput(data: string[]) {
+    const workflows = new Map<string, any[]>();
+    let count = 0;
+
+    while (data[count].trim()) {
+      const workflow = data[count];
+      const [name] = workflow.split('{');
+      const rules = this.extractValueFromBraces(workflow).split(',');
+      workflows.set(name, rules);
+      count++;
     }
 
-    sum1 += nodes[nodes.length - 1].row * nodes[0].col;
-    sum2 += nodes[0].row * nodes[nodes.length - 1].col;
-
-    return Math.abs(sum1 - sum2) / 2;
-  }
-
-  getIncrementalAmount(direction: string): { row: number; col: number } {
-    switch (direction) {
-      case 'L':
-        return { row: 0, col: -1 };
-      case 'R':
-        return { row: 0, col: 1 };
-      case 'U':
-        return { row: -1, col: 0 };
-      case 'D':
-        return { row: 1, col: 0 };
-    }
-    return { row: 0, col: 0 };
-  }
-
-  parseInput(data: string[]): any[] {
-    return data.map((item) => {
-      const [direction, amount] = item.split(/\s*[\s,]\s*/);
-      return { direction, amount: Number(amount) };
+    count++;
+    const ratings: any[] = [];
+    data.slice(count).forEach((item) => {
+      const [x, m, a, s] = this.extractValueFromBraces(item).split(',');
+      ratings.push(
+        new Map([
+          ['x', x.split('=')[1]],
+          ['m', m.split('=')[1]],
+          ['a', a.split('=')[1]],
+          ['s', s.split('=')[1]],
+        ])
+      );
     });
+
+    return { workflows, ratings };
+  }
+
+  extractValueFromBraces(str: string): string {
+    return str.match(/\{(.*?)\}/)?.[1] ?? str;
   }
 
   formatLoc(currPos: { row: number; col: number; direction: string }) {
