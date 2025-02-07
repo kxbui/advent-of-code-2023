@@ -48,7 +48,7 @@ U 2 (#7a21e3)`;
     });
   }
 
-  start(data: string[]): number {
+  start(data: string[]): bigint {
     const digPlan = this.parseInput(data);
     return this.findInteriorPoints(digPlan);
   }
@@ -56,41 +56,45 @@ U 2 (#7a21e3)`;
   /**
    * Use Pick's theorem
    */
-  findInteriorPoints(data: any[]): number {
+  findInteriorPoints(data: any[]): bigint {
     let nodes: any[] = [],
       currWidth = 0,
-      currHeight = 0;
+      currHeight = 0,
+      perimeter = 0;
 
     data.forEach(({ direction, amount }) => {
       const { row, col } = this.getIncrementalAmount(direction);
-      for (let i = 0; i < amount; i++) {
-        currWidth += col;
-        currHeight += row;
-        nodes.push({ row: currHeight, col: currWidth });
-      }
+      currWidth += col * amount;
+      currHeight += row * amount;
+      perimeter += amount;
+      nodes.push({ row: currHeight, col: currWidth });
     });
 
     const area = this.findArea(nodes);
-    return area + nodes.length / 2 + 1;
+    return BigInt(area) + BigInt(perimeter) / BigInt(2) + BigInt(1);
   }
 
   /**
    * Use shoelace formula
    */
-  findArea(nodes: any[]): number {
-    let sum1 = 0,
-      sum2 = 0;
+  findArea(nodes: any[]): bigint {
+    let sum1 = BigInt(0),
+      sum2 = BigInt(0);
 
     for (let i = 0; i < nodes.length - 1; i++) {
-      sum1 += nodes[i].row * nodes[i + 1].col;
-      sum2 += nodes[i].col * nodes[i + 1].row;
+      sum1 += BigInt(nodes[i].row) * BigInt(nodes[i + 1].col);
+      sum2 += BigInt(nodes[i].col) * BigInt(nodes[i + 1].row);
     }
 
-    sum1 += nodes[nodes.length - 1].row * nodes[0].col;
-    sum2 += nodes[0].row * nodes[nodes.length - 1].col;
+    sum1 += BigInt(nodes[nodes.length - 1].row) * BigInt(nodes[0].col);
+    sum2 += BigInt(nodes[0].row) * BigInt(nodes[nodes.length - 1].col);
 
-    return Math.abs(sum1 - sum2) / 2;
+    return this.abs(BigInt(sum1) - BigInt(sum2)) / BigInt(2);
   }
+
+  abs(x: bigint): bigint {
+    return x < 0 ? BigInt(x) * BigInt(-1) : x;
+}
 
   getIncrementalAmount(direction: string): { row: number; col: number } {
     switch (direction) {
@@ -108,9 +112,22 @@ U 2 (#7a21e3)`;
 
   parseInput(data: string[]): any[] {
     return data.map((item) => {
-      const [direction, amount] = item.split(/\s*[\s,]\s*/);
-      return { direction, amount: Number(amount) };
+      const [_d, _a, hexadecimal] = item.split(/\s*[\s,]\s*/);
+      const str = hexadecimal.replace(/[^a-zA-Z0-9\s]/g, '');
+      return {
+        direction: this.getDirection(str.at(-1)!),
+        amount: this.hexToDecimal(str.substring(0, str.length - 1)),
+      };
     });
+  }
+
+  getDirection(idx: string): string {
+    const list = ['R', 'D', 'L', 'U'];
+    return list[Number(idx)];
+  }
+
+  hexToDecimal(hexString: string): number {
+    return parseInt(hexString, 16);
   }
 
   formatLoc(currPos: { row: number; col: number; direction: string }) {
