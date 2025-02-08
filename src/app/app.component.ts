@@ -43,32 +43,31 @@ hdj{m>838:A,pv}
   }
 
   start(data: string[]): number {
-    const { workflows, ratings } = this.parseInput(data);
-    let total = 0;
-
-    ratings.forEach((rating) => {
-      const result = this.runWorkflow(workflows, rating, 'in');
-      total += result === 'A' ? this.countRatingNumbers(rating) : 0;
-    });
-    return total;
+    const { workflows } = this.parseInput(data);
+    const ratings = new Map([
+      ['x', '1-4000'],
+      ['m', '1-4000'],
+      ['a', '1-4000'],
+      ['s', '1-4000'],
+    ]);
+    return this.findAcceptableWorkflows(workflows, ratings, 'in');
   }
 
-  countRatingNumbers(rating: Map<string, string>): number {
-    return Array.from(rating.values()).reduce(
-      (total, curr) => total + Number(curr),
-      0
-    );
-  }
-
-  runWorkflow(
+  findAcceptableWorkflows(
     workflows: Map<string, any[]>,
-    rating: Map<string, string>,
+    ratings: Map<string, string>,
     startWorkflow: string
-  ): string {
-    if (['A', 'R'].includes(startWorkflow)) {
-      return startWorkflow;
+  ): number {
+    if (['A'].includes(startWorkflow)) {
+      return this.countDistinctRatings(ratings);
     }
 
+    if (['R'].includes(startWorkflow)) {
+      return 0;
+    }
+
+    let prevRatings = ratings;
+    const arr = [];
     const rules = workflows.get(startWorkflow);
     if (rules?.length) {
       let count = 0;
@@ -76,19 +75,59 @@ hdj{m>838:A,pv}
         const rule = rules[count];
         if (rule.includes(':')) {
           const [part, destination] = rule.split(':');
-          const result = this.compare(
-            rating.get(part[0])!,
-            part.substring(2),
-            part[1]
+          const { truthy, notTruthy } = this.splitRange(part);
+
+          const ratingA = new Map(prevRatings).set(
+            part[0],
+            this.mergeRange(prevRatings.get(part[0])!, truthy)
           );
-          if (result) {
-            return this.runWorkflow(workflows, rating, destination);
-          }
+          prevRatings = new Map(prevRatings).set(
+            part[0],
+            this.mergeRange(prevRatings.get(part[0])!, notTruthy)
+          );
+
+          arr.push(
+            this.findAcceptableWorkflows(workflows, ratingA, destination)
+          );
         }
         count++;
       }
     }
-    return this.runWorkflow(workflows, rating, rules?.at(-1));
+    arr.push(
+      this.findAcceptableWorkflows(workflows, prevRatings, rules?.at(-1))
+    );
+    return arr.reduce((total, curr) => total + curr, 0);
+  }
+
+  mergeRange(oldRange: string, newRange: string): string {
+    const [start1, end1] = oldRange.split('-');
+    const [start2, end2] = newRange.split('-');
+
+    return `${Math.max(Number(start1), Number(start2))}-
+    ${Math.min(Number(end1), Number(end2))}`;
+  }
+
+  countDistinctRatings(ratings: Map<string, string>): number {
+    return Array.from(ratings.values()).reduce((total, curr) => {
+      const [a, b] = curr.split('-');
+      return total * (Number(b) - Number(a) + 1);
+    }, 1);
+  }
+
+  splitRange(rule: string): { truthy: string; notTruthy: string } {
+    const oper = rule[1];
+    const num = rule.substring(2);
+
+    if (oper === '<') {
+      return {
+        truthy: `1-${Number(num) - 1}`,
+        notTruthy: `${Number(num)}-4000`,
+      };
+    }
+    return {
+      truthy: `${Number(num) + 1}-4000`,
+      notTruthy: `1-${Number(num)}`,
+    };
   }
 
   compare(a: string, b: string, operator: string): boolean {
@@ -113,21 +152,7 @@ hdj{m>838:A,pv}
       count++;
     }
 
-    count++;
-    const ratings: any[] = [];
-    data.slice(count).forEach((item) => {
-      const [x, m, a, s] = this.extractValueFromBraces(item).split(',');
-      ratings.push(
-        new Map([
-          ['x', x.split('=')[1]],
-          ['m', m.split('=')[1]],
-          ['a', a.split('=')[1]],
-          ['s', s.split('=')[1]],
-        ])
-      );
-    });
-
-    return { workflows, ratings };
+    return { workflows };
   }
 
   extractValueFromBraces(str: string): string {
