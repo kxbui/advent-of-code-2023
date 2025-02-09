@@ -1,6 +1,8 @@
 import { Component, inject, NgZone, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
+const BTN_PUSH_NUM = 1000;
+
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -9,23 +11,17 @@ import { FormsModule } from '@angular/forms';
   styleUrl: './app.component.css',
 })
 export class AppComponent {
-  input = `px{a<2006:qkq,m>2090:A,rfg}
-pv{a>1716:R,A}
-lnx{m>1548:A,A}
-rfg{s<537:gd,x>2440:R,A}
-qs{s>3448:A,lnx}
-qkq{x<1416:A,crn}
-crn{x>2662:A,R}
-in{s<1351:px,qqz}
-qqz{s>2770:qs,m<1801:hdj,R}
-gd{a>3333:R,R}
-hdj{m>838:A,pv}
+//   input = `broadcaster -> a
+// %a -> inv, con
+// &inv -> b
+// %b -> con
+// &con -> output`;
 
-{x=787,m=2655,a=1222,s=2876}
-{x=1679,m=44,a=2067,s=496}
-{x=2036,m=264,a=79,s=2244}
-{x=2461,m=1339,a=466,s=291}
-{x=2127,m=1623,a=2188,s=1013}`;
+  input = `broadcaster -> a, b, c
+%a -> b
+%b -> c
+%c -> inv
+&inv -> a`;
 
   result = signal('');
   ngZone = inject(NgZone);
@@ -43,120 +39,138 @@ hdj{m>838:A,pv}
   }
 
   start(data: string[]): number {
-    const { workflows } = this.parseInput(data);
-    const ratings = new Map([
-      ['x', '1-4000'],
-      ['m', '1-4000'],
-      ['a', '1-4000'],
-      ['s', '1-4000'],
-    ]);
-    return this.findAcceptableWorkflows(workflows, ratings, 'in');
+    let totalHigh = 0,
+      totalLow = 0;
+    const { configs, ffSet, conjSet } = this.parseInput(data);
+    const ffMap = this.initFFMap(ffSet);
+    const conjMap = this.initConjMap(configs, conjSet);
+
+    Array(BTN_PUSH_NUM)
+      .fill('')
+      .forEach(() => {
+        const { high, low } = this.runSeq(configs, ffMap, conjMap);
+        totalHigh += high;
+        totalLow += low;
+      });
+    return totalHigh * totalLow;
   }
 
-  findAcceptableWorkflows(
-    workflows: Map<string, any[]>,
-    ratings: Map<string, string>,
-    startWorkflow: string
-  ): number {
-    if (['A'].includes(startWorkflow)) {
-      return this.countDistinctRatings(ratings);
-    }
+  runSeq(
+    configs: Map<string, string[]>,
+    ffMap: Map<string, string>,
+    conjMap: Map<string, Map<string, string>>
+  ) {
+    let high = 0,
+      low = 1;
+    const queue = [];
+    queue.push('broadcaster-L');
 
-    if (['R'].includes(startWorkflow)) {
-      return 0;
-    }
-
-    let prevRatings = ratings;
-    const arr = [];
-    const rules = workflows.get(startWorkflow);
-    if (rules?.length) {
-      let count = 0;
-      while (count < rules.length) {
-        const rule = rules[count];
-        if (rule.includes(':')) {
-          const [part, destination] = rule.split(':');
-          const { truthy, notTruthy } = this.splitRange(part);
-
-          const ratingA = new Map(prevRatings).set(
-            part[0],
-            this.mergeRange(prevRatings.get(part[0])!, truthy)
-          );
-          prevRatings = new Map(prevRatings).set(
-            part[0],
-            this.mergeRange(prevRatings.get(part[0])!, notTruthy)
-          );
-
-          arr.push(
-            this.findAcceptableWorkflows(workflows, ratingA, destination)
-          );
+    while (queue.length) {
+      const config = queue.shift();
+      if (config) {
+        const [module, pulse] = config.split('-');
+        const destinations = configs.get(module);
+        if (destinations?.length) {
+          destinations.forEach((dest) => {
+            if (ffMap.has(dest)) {
+              const newPulse = this.handleFF(pulse, ffMap.get(dest)!);
+              if (newPulse) {
+                ffMap.set(dest, newPulse);
+                queue.push(`${dest}-${newPulse}`);
+              }
+            } else if (conjMap.has(dest)) {
+              const newMap = this.handleConj(
+                conjMap.get(dest)!,
+                module,
+                pulse
+              )!;
+              conjMap.set(dest, newMap);
+              const newPulse = Array.from(newMap.values()).every(
+                (item) => item === 'H'
+              )
+                ? 'L'
+                : 'H';
+              queue.push(`${dest}-${newPulse}`);
+            }
+            pulse === 'L' && low++;
+            pulse === 'H' && high++;
+          });
         }
-        count++;
       }
     }
-    arr.push(
-      this.findAcceptableWorkflows(workflows, prevRatings, rules?.at(-1))
-    );
-    return arr.reduce((total, curr) => total + curr, 0);
+    return { low, high };
   }
 
-  mergeRange(oldRange: string, newRange: string): string {
-    const [start1, end1] = oldRange.split('-');
-    const [start2, end2] = newRange.split('-');
-
-    return `${Math.max(Number(start1), Number(start2))}-
-    ${Math.min(Number(end1), Number(end2))}`;
+  initFFMap(ffSet: Set<string>) {
+    return new Map(Array.from(ffSet.values()).map((key) => [key, 'L']));
   }
 
-  countDistinctRatings(ratings: Map<string, string>): number {
-    return Array.from(ratings.values()).reduce((total, curr) => {
-      const [a, b] = curr.split('-');
-      return total * (Number(b) - Number(a) + 1);
-    }, 1);
+  initConjMap(
+    configs: Map<string, string[]>,
+    conjSet: Set<string>
+  ) {
+    const map = new Map<string, Map<string, string>>();
+    Array.from(configs.entries())
+      .forEach(([input, arr]) => {
+        arr.forEach((item) => {
+          if (conjSet.has(item)) {
+            map.has(item)
+              ? map.set(item, new Map([...map.get(item)!, [input, 'L']]))
+              : map.set(item, new Map([[input, 'L']]));
+          }
+        });
+      });
+
+    return map;
   }
 
-  splitRange(rule: string): { truthy: string; notTruthy: string } {
-    const oper = rule[1];
-    const num = rule.substring(2);
-
-    if (oper === '<') {
-      return {
-        truthy: `1-${Number(num) - 1}`,
-        notTruthy: `${Number(num)}-4000`,
-      };
+  handleFF(pulse: string, prev: string): string | null {
+    if (pulse === 'L') {
+      return prev === 'L' ? 'H' : 'L';
     }
-    return {
-      truthy: `${Number(num) + 1}-4000`,
-      notTruthy: `1-${Number(num)}`,
-    };
+    return null;
   }
 
-  compare(a: string, b: string, operator: string): boolean {
-    switch (operator) {
-      case '<':
-        return Number(a) < Number(b);
-      case '>':
-        return Number(a) > Number(b);
-    }
-    return false;
+  handleConj(
+    map: Map<string, string>,
+    module: string,
+    pulse: string
+  ): Map<string, string> {
+    const newMap = new Map(map);
+    newMap.set(module, pulse);
+    return newMap;
   }
 
-  parseInput(data: string[]) {
-    const workflows = new Map<string, any[]>();
-    let count = 0;
+  parseInput(data: string[]): {
+    configs: Map<string, string[]>;
+    ffSet: Set<string>;
+    conjSet: Set<string>;
+  } {
+    const configs = new Map<string, string[]>();
+    const ffSet = new Set<string>();
+    const conjSet = new Set<string>();
 
-    while (data[count].trim()) {
-      const workflow = data[count];
-      const [name] = workflow.split('{');
-      const rules = this.extractValueFromBraces(workflow).split(',');
-      workflows.set(name, rules);
-      count++;
-    }
+    data.forEach((line) => {
+      const idx1 = line.indexOf('-');
+      const idx2 = line.indexOf('>');
+      const module = line
+        .substring(
+          ['%', '&'].some((char) => line.startsWith(char)) ? 1 : 0,
+          idx1
+        )
+        .trim();
+      configs.set(
+        module,
+        line
+          .substring(idx2 + 1)
+          .split(',')
+          .map((str) => str.trim())
+      );
+      line.startsWith('%') && ffSet.add(module);
+      line.startsWith('&') && conjSet.add(module);
+    });
 
-    return { workflows };
-  }
-
-  extractValueFromBraces(str: string): string {
-    return str.match(/\{(.*?)\}/)?.[1] ?? str;
+    return { configs, ffSet, conjSet };
   }
 
   formatLoc(currPos: { row: number; col: number; direction: string }) {
