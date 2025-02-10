@@ -1,7 +1,7 @@
 import { Component, inject, NgZone, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-const BTN_PUSH_NUM = 1000;
+const OUTPUT = 'rx';
 
 @Component({
   selector: 'app-root',
@@ -11,17 +11,13 @@ const BTN_PUSH_NUM = 1000;
   styleUrl: './app.component.css',
 })
 export class AppComponent {
-//   input = `broadcaster -> a
-// %a -> inv, con
-// &inv -> b
-// %b -> con
-// &con -> output`;
-
-  input = `broadcaster -> a, b, c
-%a -> b
-%b -> c
-%c -> inv
-&inv -> a`;
+  input = `broadcaster -> a
+%a -> inv, con
+&inv -> b
+%b -> con
+&con -> se
+&se -> me
+&me -> rx`;
 
   result = signal('');
   ngZone = inject(NgZone);
@@ -38,30 +34,82 @@ export class AppComponent {
     });
   }
 
+  /**
+   *
+   */
   start(data: string[]): number {
-    let totalHigh = 0,
-      totalLow = 0;
     const { configs, ffSet, conjSet } = this.parseInput(data);
-    const ffMap = this.initFFMap(ffSet);
-    const conjMap = this.initConjMap(configs, conjSet);
+    const orgFFMap = this.initFFMap(ffSet);
+    const orgConjMap = this.initConjMap(configs, conjSet);
 
-    Array(BTN_PUSH_NUM)
-      .fill('')
-      .forEach(() => {
-        const { high, low } = this.runSeq(configs, ffMap, conjMap);
-        totalHigh += high;
-        totalLow += low;
+    return this.countLoop(configs, orgFFMap, orgConjMap);
+  }
+
+  /**
+   * Iterate over the four children of the broadcaster,
+   * remove the other three and any state that can no longer be reached
+   * and then run until rx changes
+   */
+  countLoop(
+    orgConfigs: Map<string, string[]>,
+    orgFFMap: Map<string, string>,
+    orgConjMap: Map<string, Map<string, string>>
+  ): number {
+    const arr: number[] = [];
+
+    const [module] = Array.from(orgConfigs.entries()).find(([_, arr]) =>
+      arr.includes(OUTPUT)
+    )!;
+    const inputs = Array.from(orgConjMap.get(module)!.entries())
+      .map(([module]) => Array.from(orgConjMap.get(module)!.keys())[0])
+      .map((key) => key);
+
+    inputs.forEach((input) => {
+      const items = Array.from(orgConjMap.get(input)!.keys()).map((key) => key);
+      const list: number[] = [];
+
+      items.forEach((item) => {
+        const configs = new Map(orgConfigs);
+        const ffMap = new Map(orgFFMap);
+        const conjMap = new Map(orgConjMap);
+
+        let count = 1,
+          changeCount = 0,
+          cycles: number[] = [],
+          curr = '';
+
+        while (changeCount < 3) {
+          this.runSeq(configs, ffMap, conjMap);
+          const modules = Array.from(conjMap.get(input)!.entries()).filter(
+            ([key]) => key === item
+          );
+
+          if (modules.length) {
+            modules.forEach(([module, value]) => {
+              if (curr != value) {
+                cycles.push(count);
+                curr = value;
+                changeCount++;
+              }
+            });
+          }
+          count++;
+        }
+
+        list.push(cycles[cycles.length - 1]);
       });
-    return totalHigh * totalLow;
+      arr.push(Math.max(...list));
+    });
+
+    return this.findLcm(arr);
   }
 
   runSeq(
     configs: Map<string, string[]>,
     ffMap: Map<string, string>,
     conjMap: Map<string, Map<string, string>>
-  ) {
-    let high = 0,
-      low = 1;
+  ): string {
+    let finalPulse = '';
     const queue = [];
     queue.push('broadcaster-L');
 
@@ -91,35 +139,31 @@ export class AppComponent {
                 ? 'L'
                 : 'H';
               queue.push(`${dest}-${newPulse}`);
+            } else {
+              finalPulse = pulse;
             }
-            pulse === 'L' && low++;
-            pulse === 'H' && high++;
           });
         }
       }
     }
-    return { low, high };
+    return finalPulse;
   }
 
   initFFMap(ffSet: Set<string>) {
     return new Map(Array.from(ffSet.values()).map((key) => [key, 'L']));
   }
 
-  initConjMap(
-    configs: Map<string, string[]>,
-    conjSet: Set<string>
-  ) {
+  initConjMap(configs: Map<string, string[]>, conjSet: Set<string>) {
     const map = new Map<string, Map<string, string>>();
-    Array.from(configs.entries())
-      .forEach(([input, arr]) => {
-        arr.forEach((item) => {
-          if (conjSet.has(item)) {
-            map.has(item)
-              ? map.set(item, new Map([...map.get(item)!, [input, 'L']]))
-              : map.set(item, new Map([[input, 'L']]));
-          }
-        });
+    Array.from(configs.entries()).forEach(([input, arr]) => {
+      arr.forEach((item) => {
+        if (conjSet.has(item)) {
+          map.has(item)
+            ? map.set(item, new Map([...map.get(item)!, [input, 'L']]))
+            : map.set(item, new Map([[input, 'L']]));
+        }
       });
+    });
 
     return map;
   }
@@ -139,6 +183,25 @@ export class AppComponent {
     const newMap = new Map(map);
     newMap.set(module, pulse);
     return newMap;
+  }
+
+  findLcm(arr: number[]) {
+    let result = arr[0];
+    for (let i = 1; i < arr.length; i++) {
+      result = this.lcm(result, arr[i]);
+    }
+    return result;
+  }
+
+  lcm(a: number, b: number) {
+    return Math.abs(a * b) / this.gcd(a, b);
+  }
+
+  gcd(a: number, b: number): number {
+    if (b === 0) {
+      return a;
+    }
+    return this.gcd(b, a % b);
   }
 
   parseInput(data: string[]): {
