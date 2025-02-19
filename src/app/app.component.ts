@@ -1,9 +1,23 @@
 import { Component, inject, NgZone, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-// const NUM_STEPS = 64;
+// const NUM_STEPS = 26501365;
 const NUM_STEPS = 6;
 
+/**
+ * The map is a big diamond shape of free path. Entire perimeter of this diamond is exactly reached
+ * after size/2 = 65 steps. Because the corner of the diamond are at the boundary of the map
+ * (when thought of as non-periodic), and the middle row and column (where the starting position S is
+ * located) are completely free (no rocks #), we are then guaranteed that another 8 surrounding diamonds
+ * will be exactly reached after size = 131 steps (in addition to the first size/2 = 65 steps).
+ * After another size = 131 steps, the next layer of diamonds are exactly reached, and so on.
+ * If we were in the continuous limit and with no rocks #, the number of positions covered as a function
+ * of steps would be A(t) = πt² (area of disk), where t is the number of steps. Having discrete steps and
+ * dismissing certain positions (adding in rocks) cannot introduce higher-order terms, so the most general
+ * form will be A(t) = at² + bt + c. We can determine a, b and c if we know A(t) for three values of t.
+ */
+
+// SOLUTION DOES NOT WORK WITH EXAMPLE INPUT!!!
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -43,32 +57,82 @@ export class AppComponent {
     const start = this.findStartPosition(map);
 
     if (start) {
-      return this.move(map, [start], 0);
+      return this.countGardenPlot(map, start, NUM_STEPS);
     }
     return 0;
   }
 
-  move(map: string[][], startNodes: any[], stepCount: number): number {
-    let arr: any[] = [];
-    let set = new Set<string>();
+  countGardenPlot(
+    data: string[][],
+    startNode: { row: number; col: number },
+    stepCount: number
+  ): number {
+    const min = 0,
+      max = 3;
+    let arr = [];
+    const length = data.length;
+    const halfLength = Math.floor(length / 2);
 
-    startNodes.forEach((node) => {
-      set = new Set([
-        ...set,
-        ...this.getNeighbors(map, node).map((loc) => this.formatLoc(loc)),
-      ]);
-    });
-
-    arr = Array.from(set.values()).map((str) => {
-      const [r, c] = str.split('-');
-      return { row: Number(r), col: Number(c) };
-    });
-
-    if (stepCount === NUM_STEPS - 1) {
-      return arr.length;
+    for (let i = min; i < max; i++) {
+      const x = halfLength + length * i;
+      let start = startNode;
+      const y = this.move(data, start, Math.abs(x));
+      arr.push(y);
     }
 
-    return this.move(map, arr, stepCount + 1);
+    const { a, b, c } = this.simplifiedLagrange(arr);
+    return this.evalQuadratic(a, b, c, (stepCount - halfLength) / length);
+  }
+
+  evalQuadratic(a: number, b: number, c: number, x: number): number {
+    return a * Math.pow(x, 2) + b * x + c;
+  }
+
+  simplifiedLagrange(values: number[]): { a: number; b: number; c: number } {
+    return {
+      a: values[0] / 2 - values[1] + values[2] / 2,
+      b: -3 * (values[0] / 2) + 2 * values[1] - values[2] / 2,
+      c: values[0],
+    };
+  }
+
+  move(
+    map: string[][],
+    startNode: { row: number; col: number },
+    stepCount: number
+  ): number {
+    const oddSet = new Set(),
+      evenSet = new Set();
+    let open: any[] = [];
+    let step = 0;
+
+    open.push({ ...startNode, step: 0 });
+    open.push(null);
+
+    while (open.length) {
+      const s = open.shift();
+
+      if (s) {
+        if (step < stepCount) {
+          const currSet = Boolean(step % 2) ? oddSet : evenSet;
+          const otherSet = Boolean(step % 2) ? evenSet : oddSet;
+          this.getNeighbors(map, s)
+            .filter((loc) => !otherSet.has(this.formatLoc(loc)))
+            .forEach((neighbor) => {
+              open.push({ ...neighbor, step: step + 1 });
+              otherSet.add(this.formatLoc(neighbor));
+            });
+          currSet.add(this.formatLoc(s));
+        }
+      } else {
+        step++;
+        if (step < stepCount) {
+          open.push(null);
+        }
+      }
+    }
+    const currSet = Boolean(step % 2) ? oddSet : evenSet;
+    return currSet.size;
   }
 
   getNeighbors(map: string[][], curr: { row: number; col: number }): any[] {
@@ -85,7 +149,31 @@ export class AppComponent {
   }
 
   isRock(map: string[][], curr: { row: number; col: number }) {
-    return map[curr.row][curr.col] === '#';
+    const { row, col } = this.wrapMap(map, curr);
+    return map[row][col] === '#';
+  }
+
+  wrapMap(map: string[][], curr: { row: number; col: number }) {
+    const width = map[0].length;
+    const height = map.length;
+
+    const row = curr.row >= 0 ? this.handlePosInd(curr.row, height) : this.handleNegInd(curr.row, height)
+
+    const col = curr.col >= 0 ? this.handlePosInd(curr.col, width) : this.handleNegInd(curr.col, width)
+
+    return { row, col };
+  }
+
+  handleNegInd(curr: number, total: number): number {
+    return Math.abs(curr) % total
+      ? total - (Math.abs(curr) % total)
+      : total - (Math.abs(curr) % total) - 1;
+  }
+
+  handlePosInd(curr: number, total: number): number {
+    return curr >= total
+      ? curr % total
+      : curr;
   }
 
   findStartPosition(map: string[][]): { row: number; col: number } | null {
@@ -102,7 +190,7 @@ export class AppComponent {
   formatLoc(currPos: { row: number; col: number }) {
     return [currPos.row, currPos.col]
       .filter((str) => str !== undefined)
-      .join('-');
+      .join(',');
   }
 
   getDigit(str: string): number {
