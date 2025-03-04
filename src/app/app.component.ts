@@ -21,11 +21,6 @@ export class AppComponent {
 0,1,6~2,1,6
 1,1,8~1,1,9`;
 
-  //   input = `0,0,1~1,0,1
-  // 0,1,1~0,1,2
-  // 0,0,5~0,0,5
-  // 0,0,4~0,1,4`;
-
   result = signal('');
   ngZone = inject(NgZone);
 
@@ -44,10 +39,18 @@ export class AppComponent {
   start(data: any[]): number {
     let list = this.parseInput(data);
 
-    return this.countDisintegratedBricks(list);
+    return this.countTotalFallingBricks(list);
   }
 
-  countDisintegratedBricks(data: any[]): number {
+  countTotalFallingBricks(data: any[]): number {
+    const supportedBy = this.getSupportBricks(data);
+
+    return data.reduce((total, _, i) => {
+      return (total += this.countFallingBricks(i, supportedBy));
+    }, 0);
+  }
+
+  getSupportBricks(data: any[]): Map<number, number[]> {
     const list = data.sort(
       (a, b) => Math.min(a[0][Z], a[1][Z]) - Math.min(b[0][Z], b[1][Z])
     );
@@ -64,13 +67,31 @@ export class AppComponent {
       supportedBy.set(i, supporters);
     });
 
-    return list.filter((_, i) => this.canDisintegrate(i, supportedBy)).length;
+    return supportedBy;
   }
 
-  canDisintegrate(idx: number, supportedBy: Map<number, number[]>) {
-    return Array.from(supportedBy.values()).every(
-      (list) => !list.includes(idx) || (list.includes(idx) && list.length > 1)
-    );
+  countFallingBricks(idx: number, supportedBy: Map<number, number[]>): number {
+    let queue: number[] = [idx];
+    const close = new Set();
+    const supportedByArr = Array.from(supportedBy.entries());
+
+    while (queue.length) {
+      const set = new Set([...close, ...queue])
+      const fallingBricks = supportedByArr
+        .filter(([_, list]) => {
+          let uniqueOfBoth = list.filter((ele) => set.has(ele));
+          return (
+            uniqueOfBoth.length &&
+            list.filter((ele) => !uniqueOfBoth.includes(ele)).length === 0
+          );
+        })
+        .map(([key]) => key);
+
+      queue.forEach((item) => close.add(item));
+      queue = [...fallingBricks.filter(item => !close.has(item))];
+    }
+    close.delete(idx);
+    return close.size;
   }
 
   dropBrick(
