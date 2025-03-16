@@ -1,10 +1,6 @@
 import { Component, inject, NgZone, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-const X = 0,
-  Y = 1,
-  Z = 2;
-
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -13,18 +9,29 @@ const X = 0,
   styleUrl: './app.component.css',
 })
 export class AppComponent {
-  input = `1,0,1~1,2,1
-0,0,2~2,0,2
-0,2,3~2,2,3
-0,0,4~0,2,4
-2,0,5~2,2,5
-0,1,6~2,1,6
-1,1,8~1,1,9`;
-
-  //   input = `0,0,1~1,0,1
-  // 0,1,1~0,1,2
-  // 0,0,5~0,0,5
-  // 0,0,4~0,1,4`;
+  input = `#.#####################
+#.......#########...###
+#######.#########.#.###
+###.....#.>.>.###.#.###
+###v#####.#v#.###.#.###
+###.>...#.#.#.....#...#
+###v###.#.#.#########.#
+###...#.#.#.......#...#
+#####.#.#.#######.#.###
+#.....#.#.#.......#...#
+#.#####.#.#.#########v#
+#.#...#...#...###...>.#
+#.#.#v#######v###.###v#
+#...#.>.#...>.>.#.###.#
+#####v#.#.###v#.#.###.#
+#.....#...#...#.#.#...#
+#.#########.###.#.#.###
+#...###...#...#...#.###
+###.###.#.###v#####v###
+#...#...#.#.>.>.#.>.###
+#.###.###.#.###.#.#v###
+#.....###...###...#...#
+#####################.#`;
 
   result = signal('');
   ngZone = inject(NgZone);
@@ -34,115 +41,100 @@ export class AppComponent {
 
     this.ngZone.runOutsideAngular(() => {
       setTimeout(() => {
-        const data = this.parseRow(this.input);
+        const data = this.parseRow(this.input).map((item) => item.split(''));
         const total = this.start(data);
         this.result.set(`${total}`);
       }, 0);
     });
   }
 
-  start(data: any[]): number {
-    let list = this.parseInput(data);
-
-    return this.countDisintegratedBricks(list);
+  start(data: string[][]): number {
+    const start = this.findAvailablePosition(data, 0);
+    const end = this.findAvailablePosition(data, data.length - 1);
+    return this.countMaxSteps(data, start, end);
   }
 
-  countDisintegratedBricks(data: any[]): number {
-    const list = data.sort(
-      (a, b) => Math.min(a[0][Z], a[1][Z]) - Math.min(b[0][Z], b[1][Z])
-    );
-    const zMap = new Map<number, Set<number>>();
-    const supportedBy = new Map<number, number[]>();
+  countMaxSteps(
+    map: string[][],
+    start: { row: number; col: number },
+    end: { row: number; col: number }
+  ): number {
+    const queue: any[] = [
+      { ...start, total: 0, visited: new Set([this.formatLoc(start)]) },
+    ];
+    let max = 0;
 
-    list.forEach((brick, i) => {
-      const result = this.dropBrick(brick, list, zMap);
-      const { z, supporters } = result;
-      zMap.has(z)
-        ? zMap.set(z, new Set([...zMap.get(z)!, i]))
-        : zMap.set(z, new Set([i]));
+    while (queue.length) {
+      const s = queue.pop();
+      if (s) {
+        if (s.row === end.row && s.col === end.col) {
+          if (s.total > max) {
+            max = s.total;
+          }
+        } else {
+          const paths = this.getNeighbors(map, s);
 
-      supportedBy.set(i, supporters);
-    });
-
-    return list.filter((_, i) => this.canDisintegrate(i, supportedBy)).length;
-  }
-
-  canDisintegrate(idx: number, supportedBy: Map<number, number[]>) {
-    return Array.from(supportedBy.values()).every(
-      (list) => !list.includes(idx) || (list.includes(idx) && list.length > 1)
-    );
-  }
-
-  dropBrick(
-    brick: any[][],
-    list: any[],
-    map: Map<number, Set<number>>
-  ): { z: number; supporters: number[] } {
-    const startZ = Math.min(brick[0][Z], brick[1][Z]);
-    const endZ = Math.max(brick[0][Z], brick[1][Z]);
-
-    if (startZ === 1) {
-      return { z: endZ, supporters: [] };
-    }
-
-    for (let z = endZ; z > 0; z--) {
-      const brickList = map.get(z);
-      if (brickList) {
-        const supporters = Array.from(brickList.values()).filter((brickIdx) =>
-          this.hasCollision(brick, list[brickIdx])
-        );
-        if (supporters.length) {
-          return {
-            z: z + (endZ === startZ ? 1 : endZ - startZ + 1),
-            supporters,
-          };
+          paths
+            .filter((path) => !s.visited.has(this.formatLoc(path)))
+            .forEach((path) => {
+              const visited = new Set([...s.visited, this.formatLoc(path)]);
+              const node = { ...path, total: s.total + 1, visited };
+              queue.push(node);
+            });
         }
       }
     }
 
-    return { z: endZ === startZ ? 1 : endZ - startZ, supporters: [] };
+    return max;
   }
 
-  hasCollision(brickA: any[][], brickB: any[][]): boolean {
+  getNeighbors(map: string[][], curr: { row: number; col: number }): any[] {
+    if (map[curr.row][curr.col] !== '.') return [this.stepOnSlope(map, curr)];
+    return [
+      // left
+      { row: curr.row, col: curr.col - 1 },
+      // right
+      { row: curr.row, col: curr.col + 1 },
+      // top
+      { row: curr.row - 1, col: curr.col },
+      // bottom
+      { row: curr.row + 1, col: curr.col },
+    ].filter((loc) => this.canMove(map, loc));
+  }
+
+  canMove(map: string[][], curr: { row: number; col: number }) {
+    return this.validNode(map, curr) && map[curr.row][curr.col] !== '#';
+  }
+
+  stepOnSlope(map: string[][], curr: { row: number; col: number }) {
+    if (map[curr.row][curr.col] === '>')
+      return { row: curr.row, col: curr.col + 1 };
+    else if (map[curr.row][curr.col] === '<')
+      return { row: curr.row, col: curr.col - 1 };
+    else if (map[curr.row][curr.col] === '^')
+      return { row: curr.row - 1, col: curr.col };
+    else return { row: curr.row + 1, col: curr.col };
+  }
+
+  findAvailablePosition(
+    map: string[][],
+    row: number
+  ): { row: number; col: number } {
+    for (let col = 0; col < map[0].length; col++) {
+      if (map[row][col] === '.') {
+        return { row, col };
+      }
+    }
+    return { row: -1, col: -1 };
+  }
+
+  validNode(map: any[][], node: { row: number; col: number }) {
+    const width = map[0].length;
+    const height = map.length;
+
     return (
-      this.hasCollisionX(brickA, brickB) && this.hasCollisionY(brickA, brickB)
+      node.row >= 0 && node.row < height && node.col >= 0 && node.col < width
     );
-  }
-
-  hasCollisionX(brickA: any[][], brickB: any[][]): boolean {
-    return [
-      this.inRange(brickA[0][X], { start: brickB[0][X], end: brickB[1][X] }),
-      this.inRange(brickA[1][X], { start: brickB[0][X], end: brickB[1][X] }),
-      this.inRange(brickB[0][X], { start: brickA[0][X], end: brickA[1][X] }),
-      this.inRange(brickB[1][X], { start: brickA[0][X], end: brickA[1][X] }),
-    ].some(Boolean);
-  }
-
-  hasCollisionY(brickA: any[][], brickB: any[][]): boolean {
-    return [
-      this.inRange(brickA[0][Y], { start: brickB[0][Y], end: brickB[1][Y] }),
-      this.inRange(brickA[1][Y], { start: brickB[0][Y], end: brickB[1][Y] }),
-      this.inRange(brickB[0][Y], { start: brickA[0][Y], end: brickA[1][Y] }),
-      this.inRange(brickB[1][Y], { start: brickA[0][Y], end: brickA[1][Y] }),
-    ].some(Boolean);
-  }
-
-  inRange(value: number, range: { start: number; end: number }): boolean {
-    return value >= range.start && value <= range.end;
-  }
-
-  parseInput(data: string[]): number[][][] {
-    const arr: any[] = [];
-
-    data.forEach((line) => {
-      const [sideA, sideB] = line.split('~');
-      arr.push([
-        sideA.split(',').map((str) => Number(str)),
-        sideB.split(',').map((str) => Number(str)),
-      ]);
-    });
-
-    return arr;
   }
 
   formatLoc(currPos: { row: number; col: number }) {
