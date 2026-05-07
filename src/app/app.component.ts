@@ -1,6 +1,25 @@
 import { Component, inject, NgZone, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
+/**
+ * Solutions:
+ * convert all vectors into y = mx + c form
+ */
+
+const MIN = 7;
+const MAX = 27;
+
+interface HailstoneModel {
+  x: number;
+  y: number;
+  z: number;
+  m: number;
+  c: number;
+  vx: number;
+  vy: number;
+  vz: number;
+}
+
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -9,29 +28,11 @@ import { FormsModule } from '@angular/forms';
   styleUrl: './app.component.css',
 })
 export class AppComponent {
-  input = `#.#####################
-#.......#########...###
-#######.#########.#.###
-###.....#.>.>.###.#.###
-###v#####.#v#.###.#.###
-###.>...#.#.#.....#...#
-###v###.#.#.#########.#
-###...#.#.#.......#...#
-#####.#.#.#######.#.###
-#.....#.#.#.......#...#
-#.#####.#.#.#########v#
-#.#...#...#...###...>.#
-#.#.#v#######v###.###v#
-#...#.>.#...>.>.#.###.#
-#####v#.#.###v#.#.###.#
-#.....#...#...#.#.#...#
-#.#########.###.#.#.###
-#...###...#...#...#.###
-###.###.#.###v#####v###
-#...#...#.#.>.>.#.>.###
-#.###.###.#.###.#.#v###
-#.....###...###...#...#
-#####################.#`;
+  input = `19, 13, 30 @ -2,  1, -2
+18, 19, 22 @ -1, -1, -2
+20, 25, 34 @ -2, -2, -4
+12, 31, 28 @ -1, -2, -1
+20, 19, 15 @  1, -5, -3`;
 
   result = signal('');
   ngZone = inject(NgZone);
@@ -41,273 +42,78 @@ export class AppComponent {
 
     this.ngZone.runOutsideAngular(() => {
       setTimeout(() => {
-        const data = this.parseRow(this.input).map((item) => item.split(''));
-        const total = this.start(data);
+        const data = this.parseRow(this.input);
+        const list = data.map((item) => this.parseHailstoneModel(item))
+        const total = this.start(list);
         this.result.set(`${total}`);
       }, 0);
     });
   }
 
-  start(data: string[][]): number {
-    const start = this.findAvailablePosition(data, 0);
-    const end = this.findAvailablePosition(data, data.length - 1);
-    return this.countMaxStepsOptimized(data, start, end);
-  }
-
-  countMaxStepsOptimized(
-    map: string[][],
-    start: { row: number; col: number },
-    end: { row: number; col: number }
-  ): number {
-    const nodes = this.findNodes(map, start, end);
-    const graph = this.buildGraph(map, nodes);
-    const startKey = this.formatLoc(start);
-    const endKey = this.formatLoc(end);
-
-    // Try topological sort for DAG optimization
-    const topoOrder = this.topologicalSort(graph);
-    if (topoOrder) {
-      return this.longestPathDAG(graph, startKey, endKey, topoOrder);
-    }
-
-    // Fallback to iterative DFS for cyclic graphs
-    return this.longestPathIterative(graph, startKey, endKey);
-  }
-
-  topologicalSort(
-    graph: Map<string, { to: string; dist: number }[]>
-  ): string[] | null {
-    const indegree = new Map<string, number>();
-    for (const [node] of graph) {
-      indegree.set(node, 0);
-    }
-    for (const [, edges] of graph) {
-      for (const edge of edges) {
-        indegree.set(edge.to, (indegree.get(edge.to) || 0) + 1);
-      }
-    }
-
-    const queue: string[] = [];
-    for (const [node, degree] of indegree) {
-      if (degree === 0) queue.push(node);
-    }
-
-    const result: string[] = [];
-    while (queue.length) {
-      const node = queue.shift()!;
-      result.push(node);
-      const edges = graph.get(node) || [];
-      for (const edge of edges) {
-        indegree.set(edge.to, indegree.get(edge.to)! - 1);
-        if (indegree.get(edge.to) === 0) {
-          queue.push(edge.to);
+  start(data: HailstoneModel[]): number {
+    let count = 0;
+    for (let i = 0; i < data.length; i++) {
+      for (let j = i + 1; j < data.length; j++) {
+        const intersection = this.getIntersection(data[i], data[j]);
+        if (intersection && this.isInBounds(intersection)) {
+          count++;
         }
       }
     }
-
-    return result.length === graph.size ? result : null;
+    return count;
   }
 
-  longestPathDAG(
-    graph: Map<string, { to: string; dist: number }[]>,
-    start: string,
-    end: string,
-    topoOrder: string[]
-  ): number {
-    const maxDist = new Map<string, number>();
-    for (const node of graph.keys()) {
-      maxDist.set(node, -Infinity);
-    }
-    maxDist.set(start, 0);
+  isInBounds(point: { x: number; y: number }): boolean {
+    return point.x >= MIN && point.x <= MAX && point.y >= MIN && point.y <= MAX;
+  }
 
-    for (const node of topoOrder) {
-      const dist = maxDist.get(node)!;
-      if (dist !== -Infinity) {
-        const edges = graph.get(node) || [];
-        for (const edge of edges) {
-          maxDist.set(edge.to, Math.max(maxDist.get(edge.to)!, dist + edge.dist));
-        }
-      }
+  getIntersection(data1: HailstoneModel, data2: HailstoneModel): { x: number; y: number } | null {
+    const { m: m1, c: c1 } = data1;
+    const { m: m2, c: c2 } = data2;
+
+    if (m1 === m2) {
+      return null; // Parallel lines
     }
 
-    return maxDist.get(end) ?? -Infinity;
-  }
+    const x = (c2 - c1) / (m1 - m2);
+    const y = m1 * x + c1;
 
-  longestPathIterative(
-    graph: Map<string, { to: string; dist: number }[]>,
-    start: string,
-    end: string
-  ): number {
-    const maxDist = new Map<string, number>();
-    const stack = [{ node: start, dist: 0, visited: new Set([start]) }];
-    let result = 0;
-
-    while (stack.length) {
-      const curr = stack.pop()!;
-      if (curr.node === end) {
-        result = Math.max(result, curr.dist);
-      } else {
-        const edges = graph.get(curr.node) || [];
-        for (const edge of edges) {
-          if (!curr.visited.has(edge.to)) {
-            const newVisited = new Set(curr.visited);
-            newVisited.add(edge.to);
-            stack.push({
-              node: edge.to,
-              dist: curr.dist + edge.dist,
-              visited: newVisited,
-            });
-          }
-        }
-      }
+    /**
+     * Looking at the vector, you can tell if a particle is moving to the right (positive x change) 
+     * or to the left (negative x change). If the intersection point has a higher x 
+     * than the starting point, but the vector is showing a negative change to x, 
+     * that means the intersection was in the past for that particle, and vice versa.
+     */
+    if ((x > data1.x && data1.vx < 0) || (x < data1.x && data1.vx > 0)) {
+      return null;
+    } else if ((x > data2.x && data2.vx < 0) || (x < data2.x && data2.vx > 0)) {
+      return null;
     }
 
-    return result;
+    return { x, y };
   }
 
-  findNodes(
-    map: string[][],
-    start: { row: number; col: number },
-    end: { row: number; col: number }
-  ): { row: number; col: number }[] {
-    const nodes: { row: number; col: number }[] = [];
-    for (let row = 0; row < map.length; row++) {
-      for (let col = 0; col < map[0].length; col++) {
-        if (map[row][col] !== '#') {
-          const neighbors = this.getNeighbors(map, { row, col });
-          const isStartOrEnd =
-            (row === start.row && col === start.col) ||
-            (row === end.row && col === end.col);
-          if (neighbors.length > 2 || isStartOrEnd) {
-            nodes.push({ row, col });
-          }
-        }
-      }
-    }
-    return nodes;
+  parseHailstoneModel(str: string): HailstoneModel {
+    const [position, velocity] = str.split('@').map((part) => part.trim());
+    const [x, y, z] = position.split(',').map((num) => this.getDigit(num));
+    const [vx, vy, vz] = velocity.split(',').map((num) => this.getDigit(num));
+    const m = this.calculateSlope({ x, y }, { x: x + vx, y: y + vy });
+    const c = this.calculateIntercept({ x, y }, m);
+    return { x, y, z, m, c, vx, vy, vz };
   }
 
-  buildGraph(
-    map: string[][],
-    nodes: { row: number; col: number }[]
-  ): Map<string, { to: string; dist: number }[]> {
-    const graph = new Map<string, { to: string; dist: number }[]>();
-    const nodeSet = new Set(nodes.map((n) => this.formatLoc(n)));
-
-    for (const node of nodes) {
-      const key = this.formatLoc(node);
-      graph.set(key, []);
-      const visited = new Set<string>();
-      const queue: { pos: { row: number; col: number }; dist: number }[] = [
-        { pos: node, dist: 0 },
-      ];
-
-      while (queue.length) {
-        const curr = queue.shift()!;
-        const currKey = this.formatLoc(curr.pos);
-        if (visited.has(currKey)) continue;
-        visited.add(currKey);
-
-        if (currKey !== key && nodeSet.has(currKey)) {
-          graph.get(key)!.push({ to: currKey, dist: curr.dist });
-          continue;
-        }
-
-        const neighbors = this.getNeighbors(map, curr.pos);
-        for (const neighbor of neighbors) {
-          const nKey = this.formatLoc(neighbor);
-          if (!visited.has(nKey)) {
-            queue.push({ pos: neighbor, dist: curr.dist + 1 });
-          }
-        }
-      }
-    }
-    return graph;
+  calculateIntercept(p1: { x: number; y: number }, m: number): number {
+    return p1.y - m * p1.x;
   }
 
-  dfs(
-    graph: Map<string, { to: string; dist: number }[]>,
-    curr: string,
-    end: string,
-    memo: Map<string, number>
-  ): number {
-    if (curr === end) return 0;
-    if (memo.has(curr)) return memo.get(curr)!;
-    let max = -Infinity;
-    const edges = graph.get(curr) || [];
-    for (const edge of edges) {
-      const res = this.dfs(graph, edge.to, end, memo);
-      if (res !== -Infinity) {
-        max = Math.max(max, res + edge.dist);
-      }
-    }
-    memo.set(curr, max);
-    return max;
-  }
-
-  getNeighbors(map: string[][], curr: { row: number; col: number }): any[] {
-    return [
-      // left
-      { row: curr.row, col: curr.col - 1 },
-      // right
-      { row: curr.row, col: curr.col + 1 },
-      // top
-      { row: curr.row - 1, col: curr.col },
-      // bottom
-      { row: curr.row + 1, col: curr.col },
-    ].filter((loc) => this.canMove(map, loc));
-  }
-
-  canMove(map: string[][], curr: { row: number; col: number }) {
-    return this.validNode(map, curr) && map[curr.row][curr.col] !== '#';
-  }
-
-  getAllowedMoves(
-    map: string[][],
-    pos: { row: number; col: number }
-  ): string[] {
-    const cell = map[pos.row][pos.col];
-    if (cell === '#') return [];
-    return ['left', 'right', 'top', 'bottom'];
-  }
-
-  getNextPos(pos: { row: number; col: number }, dir: string): { row: number; col: number } {
-    if (dir === 'left') return { row: pos.row, col: pos.col - 1 };
-    if (dir === 'right') return { row: pos.row, col: pos.col + 1 };
-    if (dir === 'top') return { row: pos.row - 1, col: pos.col };
-    if (dir === 'bottom') return { row: pos.row + 1, col: pos.col };
-    return pos;
-  }
-
-  findAvailablePosition(
-    map: string[][],
-    row: number
-  ): { row: number; col: number } {
-    for (let col = 0; col < map[0].length; col++) {
-      if (map[row][col] !== '#') {
-        return { row, col };
-      }
-    }
-    return { row: -1, col: -1 };
-  }
-
-  validNode(map: any[][], node: { row: number; col: number }) {
-    const width = map[0].length;
-    const height = map.length;
-
-    return (
-      node.row >= 0 && node.row < height && node.col >= 0 && node.col < width
-    );
-  }
-
-  formatLoc(currPos: { row: number; col: number }) {
-    return [currPos.row, currPos.col]
-      .filter((str) => str !== undefined)
-      .join('-');
+  calculateSlope(p1: { x: number; y: number }, p2: { x: number; y: number }): number {
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    return dx !== 0 ? dy / dx : Infinity;
   }
 
   getDigit(str: string): number {
-    return parseInt(str.replace(/^\D+/g, ''));
+    return parseInt(str.replace(/^-\D+/g, ''));
   }
 
   parseRow(data: any): any[] {
